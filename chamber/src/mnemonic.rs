@@ -1,11 +1,11 @@
 //! BIP39 mnemonic generation, parsing, and seed derivation.
 //!
 //! Uses a 256-bit-entropy (24 word) English BIP39 mnemonic and always
-//! derives the seed with an empty passphrase:
+//! derives the seed with an empty passphrase. It uses PBKDF2 for key deviation
+//! and HMAC-SHA512 as pseudorandom underlying function which is run 2048 rounds.
+//! PBKDF2 salt is a literal "mnemonic" string (without concatenated password).
 //!
-//! ```text
-//! seed = PBKDF2-HMAC-SHA512(mnemonic, "mnemonic" + "", 2048, 64)
-//! ```
+//! The size of the derived seed is 64 bytes (512 bits).
 
 use getrandom::getrandom;
 
@@ -30,10 +30,11 @@ impl Mnemonic {
         Ok(Self(mnemonic))
     }
 
-    /// Parse and validate an existing 24-word phrase mnemonic phrase (checksum enforced).
+    /// Parse and validate an existing 24-word phrase mnemonic phrase.
     pub fn parse(phrase: &str) -> Result<Self> {
         let mnemonic = bip39::Mnemonic::parse_normalized(phrase.trim());
         let mnemonic = mnemonic.map_err(|e| Error::Mnemonic(e.to_string()))?;
+
         let count = mnemonic.word_count();
         if count != Self::WORDS {
             return Err(Error::Mnemonic(format!(
@@ -41,6 +42,7 @@ impl Mnemonic {
                 Self::WORDS
             )));
         }
+
         Ok(Self(mnemonic))
     }
 
