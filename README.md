@@ -8,7 +8,7 @@ A Rust wallet library for [gno.land](https://gno.land).
 Chamber provides key generation, HD derivation, addresses, secp256k1
 signing, and an encrypted keystore. The crate is `#![forbid(unsafe_code)]`.
 
-TODO: Transaction building and signing.
+> **TODO**: Transaction building and signing
 
 ## Features
 
