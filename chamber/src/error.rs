@@ -1,0 +1,12 @@
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The BIP39 mnemonic could not be parsed or has an invalid checksum.
+    #[error("invalid mnemonic: {0}")]
+    Mnemonic(String),
+
+    /// Key had the wrong length or was not a valid secp256k1 scalar/point.
+    #[error("invalid key: {0}")]
+    Key(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;

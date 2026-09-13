@@ -1,0 +1,18 @@
+[package]
+name = "chamber-gnoland"
+version = "0.1.0"
+edition = "2024"
+description = "A Rust wallet library for gno.land: BIP39/BIP44 keys, gno addresses, secp256k1 signing, encrypted keystore"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jeronimoalbi/chamber"
+keywords = ["gno", "gnoland", "wallet", "secp256k1", "bip39"]
+categories = ["cryptography::cryptocurrencies"]
+
+[lib]
+name = "chamber"
+path = "src/lib.rs"
+
+[dependencies]
+bip39 = "2.1"
+getrandom = "0.2"
+thiserror = "2"
