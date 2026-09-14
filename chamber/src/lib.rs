@@ -1,17 +1,30 @@
 //! A Rust wallet library for gno.land.
 //!
-//! It provides:
-//! * [`Mnemonic`] — BIP39 (24-word English, empty passphrase).
-//! * [`hdpath`] — BIP32/BIP44 derivation (`44'/118'/account'/0/index`).
-//! * [`PrivKey`] / [`PubKey`] — secp256k1 keys, `RIPEMD160(SHA256(pubkey))` addresses.
-//! * [`Address`] — 20 bytes, bech32 `g1...` (BIP-173).
-//! * [`PrivKey::sign`] — `ECDSA(SHA-256(msg))`, RFC-6979`.
-//! * [`keystore`] / [`Store`] — Argon2id + XChaCha20-Poly1305 keys on disk.
+//! #### Example
+//!
+//! ```
+//! use chamber::{Mnemonic, PrivKey, hdpath::Bip44Path};
+//!
+//! let address = "g1r5v5srda7xfth3hn2s26txvrcrntldjughmckm";
+//! let mnemonic = Mnemonic::parse(
+//!     "abandon abandon abandon abandon abandon abandon abandon abandon \
+//!      abandon abandon abandon abandon abandon abandon abandon abandon \
+//!      abandon abandon abandon abandon abandon abandon abandon art",
+//! ).unwrap();
+//!
+//! let key = PrivKey::from_mnemonic(&mnemonic, Bip44Path::default()).unwrap();
+//! assert_eq!(key.pub_key().address().to_bech32(), address);
+//!
+//! let sig = key.sign(b"hello");
+//! assert!(key.pub_key().verify(b"hello", &sig));
+//! ```
 
 #![forbid(unsafe_code)]
 
+pub mod address;
 pub mod error;
 pub mod mnemonic;
 
+pub use address::Address;
 pub use error::{Error, Result};
 pub use mnemonic::Mnemonic;
