@@ -7,6 +7,10 @@ pub enum Error {
     /// Key had the wrong length or was not a valid secp256k1 scalar/point.
     #[error("invalid key: {0}")]
     Key(String),
+
+    /// A bech32 string could not be decoded.
+    #[error("invalid bech32: {0}")]
+    Bech32(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
