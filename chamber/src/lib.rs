@@ -23,8 +23,11 @@
 
 pub mod address;
 pub mod error;
+pub mod hdpath;
+pub mod key;
 pub mod mnemonic;
 
 pub use address::Address;
 pub use error::{Error, Result};
+pub use key::{PrivKey, PubKey};
 pub use mnemonic::Mnemonic;

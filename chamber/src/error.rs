@@ -4,6 +4,10 @@ pub enum Error {
     #[error("invalid mnemonic: {0}")]
     Mnemonic(String),
 
+    /// A BIP32/BIP44 derivation path was malformed.
+    #[error("invalid derivation path: {0}")]
+    Path(String),
+
     /// Key had the wrong length or was not a valid secp256k1 scalar/point.
     #[error("invalid key: {0}")]
     Key(String),
