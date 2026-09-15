@@ -2,6 +2,7 @@ use hmac::{Hmac, Mac};
 use k256::elliptic_curve::ops::Reduce;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::{FieldBytes, Scalar, SecretKey, U256};
+use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 
 use crate::error::{Error, Result};
@@ -16,7 +17,7 @@ type HmacSha512 = Hmac<Sha512>;
 ///
 /// Path elements are fixed, except `account` and `index` that vary.
 /// String representation has no leading "m/".
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Bip44Path {
     /// The `account'` level (hardened).
     pub account: u32,

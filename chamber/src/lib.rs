@@ -3,33 +3,38 @@
 //! #### Example
 //!
 //! ```
-//! use chamber::{Mnemonic, PrivKey, hdpath::Bip44Path};
+//! use chamber::{Mnemonic, PrivKey, Store, hdpath::Bip44Path};
 //!
-//! let address = "g1r5v5srda7xfth3hn2s26txvrcrntldjughmckm";
-//! let mnemonic = Mnemonic::parse(
-//!     "abandon abandon abandon abandon abandon abandon abandon abandon \
-//!      abandon abandon abandon abandon abandon abandon abandon abandon \
-//!      abandon abandon abandon abandon abandon abandon abandon art",
-//! ).unwrap();
-//!
+//! // Generate a new address from a fresh 24-word mnemonic
+//! let mnemonic = Mnemonic::generate().unwrap();
 //! let key = PrivKey::from_mnemonic(&mnemonic, Bip44Path::default()).unwrap();
-//! assert_eq!(key.pub_key().address().to_bech32(), address);
+//! println!("{}", key.pub_key().address());
 //!
+//! // Sign arbitrary bytes
 //! let sig = key.sign(b"hello");
 //! assert!(key.pub_key().verify(b"hello", &sig));
+//!
+//! // Store the key encrypted on disk
+//! let store = Store::new_in_memory();
+//! store.add("alice", &mnemonic, "passphrase", Bip44Path::default()).unwrap();
 //! ```
 
 #![forbid(unsafe_code)]
 
 pub mod address;
+pub mod backend;
+mod cipher;
 pub mod error;
 pub mod hdpath;
 pub mod key;
 pub mod mnemonic;
 pub mod signer;
+pub mod store;
 
 pub use address::Address;
+pub use cipher::EncryptedBlob;
 pub use error::{Error, Result};
 pub use key::{PrivKey, PubKey};
 pub use mnemonic::Mnemonic;
 pub use signer::Signer;
+pub use store::Store;

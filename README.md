@@ -1,28 +1,46 @@
 # Chamber
 
-A Rust wallet library for [gno.land](https://gno.land).
+A Rust wallet library for [Gno.land](https://gno.land).
 
 [![Build Status][ci-badge]][ci-url]
 [![MIT licensed][mit-badge]][mit-url]
 
 Chamber provides key generation, HD derivation, addresses, secp256k1
-signing, and an encrypted keystore. The crate is `#![forbid(unsafe_code)]`.
+signing, and an encrypted keystore.
+
+The crate is `#![forbid(unsafe_code)]`.
 
 > **TODO**: Transaction building and signing
+
+## Installation
+
+```sh
+cargo add chamber-gnoland
+```
 
 ## Example
 
 ```rust
+use std::error::Error;
+
 use chamber::{Mnemonic, PrivKey, Store, hdpath::Bip44Path};
 
-// Generate a new address from a fresh 24-word mnemonic
-let m = Mnemonic::generate()?;
-let key = PrivKey::from_mnemonic(&m, Bip44Path::default())?;
-println!("{}", key.pub_key().address());
+fn main() -> Result<(), Box<dyn Error>> {
+    // Generate a new address from a fresh 24-word mnemonic
+    let mnemonic = Mnemonic::generate()?;
+    let key = PrivKey::from_mnemonic(&mnemonic, Bip44Path::default())?;
+    println!("{}", key.pub_key().address());
 
-// Sign arbitrary bytes
-let sig = key.sign(b"hello");
-assert!(key.pub_key().verify(b"hello", &sig));
+    // Sign arbitrary bytes
+    let sig = key.sign(b"hello");
+    assert!(key.pub_key().verify(b"hello", &sig));
+
+    // Store the key encrypted on disk
+    let store = Store::open("/home/alice/.chamber")?;
+    store.add("alice", &mnemonic, "passphrase", Bip44Path::default())?;
+
+    Ok(())
+}
 ```
 
 ## License
