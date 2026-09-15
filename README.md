@@ -10,17 +10,6 @@ signing, and an encrypted keystore. The crate is `#![forbid(unsafe_code)]`.
 
 > **TODO**: Transaction building and signing
 
-## Features
-
-| | |
-|---|---|
-| **Mnemonics** | BIP39, 24-word English, empty passphrase |
-| **HD derivation** | BIP32/BIP44 `44'/118'/account'/0/index`, byte-compatible with `tm2/pkg/crypto/hd` |
-| **Keys** | secp256k1 33-byte compressed public keys |
-| **Addresses** | `RIPEMD160(SHA256(pubkey))`, bech32 `g1…` (BIP-173) |
-| **Signing** | `ECDSA(SHA-256(msg))`, RFC-6979 deterministic, `gnokey` compatible, low-S, 64-byte `R‖S` |
-| **Keystore** | Argon2id + XChaCha20-Poly1305, one JSON file per key |
-
 ## Example
 
 ```rust
@@ -34,21 +23,6 @@ println!("{}", key.pub_key().address());
 // Sign arbitrary bytes
 let sig = key.sign(b"hello");
 assert!(key.pub_key().verify(b"hello", &sig));
-
-// Encrypt on disk
-let store = Store::open("~/.chamber")?;
-store.add("main", &m, "passphrase", Bip44Path::default())?;
-let key = store.unlock("main", "passphrase")?;
-```
-
-Keys can be moved to `gnokey` through the mnemonic:
-
-```rust
-let phrase = store
-    .reveal_mnemonic("main", "passphrase")
-    .unwrap()
-    .as_str();
-println!("Paste phrase into `gnokey add imported --recover`:\n{phrase}");
 ```
 
 ## License
