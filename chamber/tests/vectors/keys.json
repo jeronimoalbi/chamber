@@ -1,0 +1,36 @@
+{
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+  "seed_hex": "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf705489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840",
+  "derived": [
+    {
+      "path": "44'/118'/0'/0/0",
+      "priv_hex": "8088c2ed2149c34f6d6533b774da4e1692eb5cb426fdbaef6898eeda489630b7",
+      "pub_hex": "02ba66a84cf7839af172a13e7fc9f5e7008cb8bca1585f8f3bafb3039eda3c1fdd",
+      "address": "g1r5v5srda7xfth3hn2s26txvrcrntldjughmckm",
+      "pub_bech32": "gpub1pgfj7ard9eg82cjtv4u4xetrwqer2dntxyfzxz3pq2axd2zv77pe4utj5yl8lj04uuqgew9u59v9lrem47es88k68s0a68krdnz"
+    },
+    {
+      "path": "44'/118'/0'/0/1",
+      "priv_hex": "f8c948bd5551a44d403853db6e3fb68bf9099adb3557220de38cdea322a9bc48",
+      "pub_hex": "03c47087519555237df8f1175e7aa24e1f7981076f92c561da8506f7242897bdd9",
+      "address": "g1vtad8680vhdfqvxx0f2yaxa6agdylelmtjqnfj",
+      "pub_bech32": "gpub1pgfj7ard9eg82cjtv4u4xetrwqer2dntxyfzxz3pq0z8pp63j42jxl0c7yt4u74zfc0hnqg8d7fv2cw6s5r0wfpgj77ajl8v6mr"
+    },
+    {
+      "path": "44'/118'/1'/0/0",
+      "priv_hex": "19d03936e7933e2a19103f0f1b34e9bd7f7060f597a614721624c5fce64d01c1",
+      "pub_hex": "0205b038dd33373998407691d87ab61c829415f1929d3455e2a99a1f79b15aeae5",
+      "address": "g1sr6k0yjfj38wx2hanxgw7c3f4nam5s6979sj95",
+      "pub_bech32": "gpub1pgfj7ard9eg82cjtv4u4xetrwqer2dntxyfzxz3pqgzmqwxaxvmnnxzqw6gas74krjpfg903j2wng40z4xdp77d3tt4w23eusl2"
+    },
+    {
+      "path": "44'/118'/5'/0/7",
+      "priv_hex": "562355942ce3850c571a9b9fd15a0211485d3802ad445fc1b0aa72309d2da7c1",
+      "pub_hex": "034bda8f89656056e8101a1a67afa00252a118bab849609a169aa897f3b94a001b",
+      "address": "g1wxypjkwn6e7ltsvn9ddmsnk56z20tymmapjvc4",
+      "pub_bech32": "gpub1pgfj7ard9eg82cjtv4u4xetrwqer2dntxyfzxz3pqd9a4rufv4s9d6qsrgdx0taqqff2zx96hpykpxskn25f0uaefgqpkm5mt8y"
+    }
+  ],
+  "sign_msg": "gnochamber signing test vector",
+  "sign_hex": "c8016beff930a8072792f0accc41b615040eaeb94d76daba2b24cdbf7c12e21a3f9e9b1ec3cea14cde11c73588e4e623e88ad17d61d98f5d9dec05314186db0d"
+}
