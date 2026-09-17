@@ -8,24 +8,73 @@ mod memory;
 pub use fs::FsBackend;
 pub use memory::MemoryBackend;
 
+use serde::{Deserialize, Serialize};
+
+use crate::cipher::EncryptedBlob;
 use crate::error::Result;
+use crate::hdpath::Bip44Path;
 
-/// A flat key/value byte storage backend.
-pub trait Backend: Send + Sync {
-    /// Fetch the raw bytes stored under `key`, or `None` if absent.
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
+/// Record contains data of a single key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Record {
+    /// Local name of the key.
+    pub name: String,
 
-    /// Store `value` under `key`, creating or overwriting it.
-    fn set(&self, key: &str, value: &[u8]) -> Result<()>;
+    /// Bech32 address.
+    pub address: String,
 
-    /// Remove `key` or no-op if it doesn't exist.
-    fn remove(&self, key: &str) -> Result<()>;
+    /// Compressed public key as base64.
+    pub pubkey_b64: String,
 
-    /// Return every key currently stored, in any order.
-    fn keys(&self) -> Result<Vec<String>>;
+    /// Derivation path used, when this key was added from a mnemonic,
+    /// or `None` when key was added from raw bytes.
+    pub path: Option<Bip44Path>,
 
-    /// Check whether `key` exists.
-    fn exists(&self, key: &str) -> Result<bool> {
-        Ok(self.get(key)?.is_some())
+    /// Encrypted (Argon2id + XChaCha20-Poly1305) private key.
+    /// Encrypts the raw 32-byte private key.
+    pub privkey_encrypted: EncryptedBlob,
+}
+
+/// Persists [`Record`]s for a [`crate::store::Store`].
+pub trait Backend: Send {
+    /// Insert a record.
+    fn insert(&mut self, record: Record) -> Result<()>;
+
+    /// Replace a record.
+    fn update(&mut self, record: Record) -> Result<()>;
+
+    /// Look up a record by name.
+    fn get(&self, name: &str) -> Result<Option<Record>>;
+
+    /// Remove a record.
+    fn remove(&mut self, name: &str) -> Result<()>;
+
+    /// return every stored record, in unspecified order.
+    fn list(&self) -> Result<Vec<Record>>;
+}
+
+/// Common test helpers used within this crate.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD as B64;
+
+    use crate::cipher;
+    use crate::key::PrivKey;
+
+    /// Build a valid [`Record`] named `name`, for tests that only care
+    /// about a record's identity/shape, not its cryptographic content.
+    pub(crate) fn record(name: &str) -> Record {
+        let key = PrivKey::from_bytes([7u8; 32]).unwrap();
+        let blob = cipher::encrypt(&key.to_bytes(), "pass").unwrap();
+        Record {
+            name: name.to_string(),
+            address: key.pub_key().address().to_bech32(),
+            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            path: None,
+            privkey_encrypted: blob,
+        }
     }
 }

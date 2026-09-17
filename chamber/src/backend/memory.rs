@@ -1,13 +1,12 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 
-use super::Backend;
-use crate::error::Result;
+use super::{Backend, Record};
+use crate::error::{Error, Result};
 
-/// In-memory backend.
+/// In-memory backend, keyed by record name.
 #[derive(Default)]
 pub struct MemoryBackend {
-    data: Mutex<HashMap<String, Vec<u8>>>,
+    records: HashMap<String, Record>,
 }
 
 impl MemoryBackend {
@@ -18,25 +17,37 @@ impl MemoryBackend {
 }
 
 impl Backend for MemoryBackend {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        Ok(self.data.lock().unwrap().get(key).cloned())
-    }
+    fn insert(&mut self, record: Record) -> Result<()> {
+        if self.records.contains_key(&record.name) {
+            return Err(Error::AlreadyExists(record.name));
+        }
 
-    fn set(&self, key: &str, value: &[u8]) -> Result<()> {
-        self.data
-            .lock()
-            .unwrap()
-            .insert(key.to_string(), value.to_vec());
+        self.records.insert(record.name.clone(), record);
         Ok(())
     }
 
-    fn remove(&self, key: &str) -> Result<()> {
-        self.data.lock().unwrap().remove(key);
+    fn update(&mut self, record: Record) -> Result<()> {
+        if !self.records.contains_key(&record.name) {
+            return Err(Error::NotFound(record.name));
+        }
+
+        self.records.insert(record.name.clone(), record);
         Ok(())
     }
 
-    fn keys(&self) -> Result<Vec<String>> {
-        Ok(self.data.lock().unwrap().keys().cloned().collect())
+    fn get(&self, name: &str) -> Result<Option<Record>> {
+        Ok(self.records.get(name).cloned())
+    }
+
+    fn remove(&mut self, name: &str) -> Result<()> {
+        self.records
+            .remove(name)
+            .map(|_| ())
+            .ok_or_else(|| Error::NotFound(name.to_string()))
+    }
+
+    fn list(&self) -> Result<Vec<Record>> {
+        Ok(self.records.values().cloned().collect())
     }
 }
 
@@ -44,42 +55,90 @@ impl Backend for MemoryBackend {
 mod tests {
     use super::*;
 
+    fn test_record(name: &str) -> Record {
+        crate::backend::test_support::record(name)
+    }
+
     #[test]
     fn memory_backend_round_trips_and_reports_absence() {
         // Arrange
-        let backend = MemoryBackend::new();
+        let mut backend = MemoryBackend::new();
 
         // Act
-        backend.set("alice", b"hello").unwrap();
+        backend.insert(test_record("alice")).unwrap();
 
         // Assert
-        assert_eq!(backend.get("alice").unwrap().unwrap(), b"hello");
-        assert!(backend.exists("alice").unwrap());
-        assert_eq!(backend.get("ghost").unwrap(), None);
-        assert!(!backend.exists("ghost").unwrap());
+        assert_eq!(backend.get("alice").unwrap().unwrap().name, "alice");
+        assert!(backend.get("ghost").unwrap().is_none());
     }
 
     #[test]
-    fn memory_backend_remove_is_a_no_op_when_absent() {
-        // Act
-        let backend = MemoryBackend::new();
-
-        // Assert
-        assert!(backend.remove("ghost").is_ok());
-    }
-
-    #[test]
-    fn memory_backend_keys_reflects_set_and_remove() {
+    fn memory_backend_insert_rejects_duplicate_name() {
         // Arrange
-        let backend = MemoryBackend::new();
-        backend.set("alpha", b"a").unwrap();
-        backend.set("zeta", b"z").unwrap();
+        let mut backend = MemoryBackend::new();
+        backend.insert(test_record("alice")).unwrap();
+
+        // Act
+        let err = backend.insert(test_record("alice")).unwrap_err();
+
+        // Assert
+        assert_eq!(err.to_string(), "key already exists: alice");
+    }
+
+    #[test]
+    fn memory_backend_update_replaces_existing_record() {
+        // Arrange
+        let mut backend = MemoryBackend::new();
+        backend.insert(test_record("alice")).unwrap();
+        let mut updated = test_record("alice");
+        updated.address = "g1updated".to_string();
+
+        // Act
+        backend.update(updated).unwrap();
+
+        // Assert
+        assert_eq!(backend.get("alice").unwrap().unwrap().address, "g1updated");
+    }
+
+    #[test]
+    fn memory_backend_update_not_found() {
+        // Arrange
+        let mut backend = MemoryBackend::new();
+
+        // Act
+        let err = backend.update(test_record("ghost")).unwrap_err();
+
+        // Assert
+        assert_eq!(err.to_string(), "key not found: ghost");
+    }
+
+    #[test]
+    fn memory_backend_remove_not_found() {
+        // Act
+        let mut backend = MemoryBackend::new();
+
+        // Assert
+        let err = backend.remove("ghost").unwrap_err();
+        assert_eq!(err.to_string(), "key not found: ghost");
+    }
+
+    #[test]
+    fn memory_backend_list_reflects_insert_and_remove() {
+        // Arrange
+        let mut backend = MemoryBackend::new();
+        backend.insert(test_record("alpha")).unwrap();
+        backend.insert(test_record("zeta")).unwrap();
 
         // Act
         backend.remove("alpha").unwrap();
-        let keys = backend.keys().unwrap();
+        let names: Vec<String> = backend
+            .list()
+            .unwrap()
+            .into_iter()
+            .map(|r| r.name)
+            .collect();
 
         // Assert
-        assert_eq!(keys, vec!["zeta".to_string()]);
+        assert_eq!(names, vec!["zeta".to_string()]);
     }
 }

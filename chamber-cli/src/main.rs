@@ -22,12 +22,12 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let store = chamber::Store::open(&cli.home)
+    let mut store = chamber::Store::open(&cli.home)
         .with_context(|| format!("failed to open {}", cli.home.display()))?;
     let io = TermIo;
 
     match cli.command {
-        Command::Add(args) => commands::add::run(&args, &store, &io),
+        Command::Add(args) => commands::add::run(&args, &mut store, &io),
         Command::List => commands::list::run(&store, &io),
     }
 }

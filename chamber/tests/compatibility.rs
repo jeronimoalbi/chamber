@@ -91,14 +91,12 @@ fn address_bech32_round_trips() {
 
 #[test]
 fn store_add_list_rebuild_unlock() {
-    //! Store mechanics (index rebuild, sort order, rotate, delete, not-found
-    //! errors) are already covered by unit tests in src/store.rs with
-    //! synthetic keys. This test only checks that driving real gno-derived
-    //! keys through the Store API reproduces the golden addresses.
+    //! This test only checks that driving real gno derived keys
+    //! through the Store API reproduces the golden addresses.
 
     let vec = vectors();
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path()).unwrap();
+    let mut store = Store::open(dir.path()).unwrap();
 
     let mnemonic = Mnemonic::parse(&vec.mnemonic).unwrap();
     let rec = store

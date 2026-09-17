@@ -6,11 +6,12 @@ use base64::engine::general_purpose::STANDARD as B64;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use crate::backend::Record;
 use crate::cipher::{self, EncryptedBlob};
 use crate::error::{Error, Result};
 use crate::hdpath::Bip44Path;
 use crate::key::PrivKey;
-use crate::store::{Record, Store};
+use crate::store::Store;
 
 pub const EXPORT_FORMAT: &str = "chamber-keyexport-v1";
 
@@ -73,7 +74,7 @@ impl Store {
     /// store passphrase when the former is not specified. Store passphrase
     /// is used to encript the key before saving it into the store.
     pub fn import_key(
-        &self,
+        &mut self,
         name: &str,
         bundle: &ExportBundle,
         transfer_passphrase: Option<&str>,
@@ -161,7 +162,7 @@ mod tests {
     }
 
     fn seeded_store() -> Store {
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         store
             .add_privkey("alice", &test_key(), "store-pass")
             .unwrap();
@@ -267,7 +268,7 @@ mod tests {
         let bundle = src
             .export_key("alice", "store-pass", Some("transfer-pass"))
             .unwrap();
-        let dst = Store::new_in_memory();
+        let mut dst = Store::new_in_memory();
 
         // Act
         let record = dst
@@ -291,7 +292,7 @@ mod tests {
         let bundle = src
             .export_key("alice", "store-pass", Some("transfer-pass"))
             .unwrap();
-        let dst = Store::new_in_memory();
+        let mut dst = Store::new_in_memory();
 
         // Act
         let err = dst
@@ -317,7 +318,7 @@ mod tests {
         // Arrange
         let src = seeded_store();
         let bundle = src.export_key("alice", "store-pass", None).unwrap();
-        let dst = Store::new_in_memory();
+        let mut dst = Store::new_in_memory();
 
         // Act
         let record = dst.import_key("copy", &bundle, None, "store-pass").unwrap();
@@ -340,7 +341,7 @@ mod tests {
             .export_key("alice", "store-pass", Some("transfer-pass"))
             .unwrap();
         bundle.format = "gnokey-armor-v1".to_string();
-        let dst = Store::new_in_memory();
+        let mut dst = Store::new_in_memory();
 
         // Act
         let err = dst
@@ -358,7 +359,7 @@ mod tests {
     #[test]
     fn import_key_rejects_duplicate_name() {
         // Arrange
-        let store = seeded_store();
+        let mut store = seeded_store();
         let bundle = store.export_key("alice", "store-pass", None).unwrap();
 
         // Act
@@ -385,7 +386,7 @@ mod tests {
             path: None,
             privkey_encrypted: cipher::encrypt(&[1u8; 31], "transfer-pass").unwrap(),
         };
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
 
         // Act
         let err = store

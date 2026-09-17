@@ -15,7 +15,7 @@
 //! assert!(key.pub_key().verify(b"hello", &sig));
 //!
 //! // Store the key encrypted on disk
-//! let store = Store::new_in_memory();
+//! let mut store = Store::new_in_memory();
 //! store.add("alice", &mnemonic, "passphrase", Bip44Path::default()).unwrap();
 //! ```
 

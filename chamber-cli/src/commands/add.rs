@@ -27,7 +27,7 @@ pub struct AddArgs {
     pub index: u32,
 }
 
-pub fn run(args: &AddArgs, store: &Store, io: &impl Io) -> Result<()> {
+pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
     if store.get_by_name(&args.name).is_ok() {
         bail!(
             "key with name \"{}\" already exist, pick a different name",
@@ -125,11 +125,11 @@ mod tests {
     #[test]
     fn generates_a_new_key_by_default() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let io = FakeIo::with_answers(["secret pass", "secret pass"]);
 
         // Act
-        run(&args("alice"), &store, &io).unwrap();
+        run(&args("alice"), &mut store, &io).unwrap();
 
         // Assert
         let record = store.get_by_name("alice").unwrap();
@@ -145,12 +145,12 @@ mod tests {
     #[test]
     fn recovers_from_an_existing_phrase_without_reprinting_it() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let mnemonic = Mnemonic::generate().unwrap();
         let io = FakeIo::with_answers([mnemonic.to_string(), "pass".into(), "pass".into()]);
 
         // Act
-        run(&recover_args("bob"), &store, &io).unwrap();
+        run(&recover_args("bob"), &mut store, &io).unwrap();
 
         // Assert
         assert!(store.get_by_name("bob").is_ok());
@@ -165,11 +165,11 @@ mod tests {
     #[test]
     fn rejects_an_invalid_recovery_phrase() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let io = FakeIo::with_answers(["not a real phrase"]);
 
         // Act
-        let err = run(&recover_args("bob"), &store, &io).unwrap_err();
+        let err = run(&recover_args("bob"), &mut store, &io).unwrap_err();
 
         // Assert
         assert!(err.to_string().contains("invalid recovery phrase"));
@@ -178,13 +178,13 @@ mod tests {
     #[test]
     fn rejects_a_duplicate_name_before_prompting_for_anything() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let io = FakeIo::with_answers(["secret pass", "secret pass"]);
-        run(&args("alice"), &store, &io).unwrap();
+        run(&args("alice"), &mut store, &io).unwrap();
 
         // Act
         let empty_io = FakeIo::default();
-        let err = run(&args("alice"), &store, &empty_io).unwrap_err();
+        let err = run(&args("alice"), &mut store, &empty_io).unwrap_err();
 
         // Assert
         assert!(
@@ -197,11 +197,11 @@ mod tests {
     #[test]
     fn fails_when_passphrases_dont_match() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let io = FakeIo::with_answers(["first", "second"]);
 
         // Act
-        let err = run(&args("alice"), &store, &io).unwrap_err();
+        let err = run(&args("alice"), &mut store, &io).unwrap_err();
 
         // Assert
         assert!(err.to_string().contains("passphrases don't match"));
@@ -211,11 +211,11 @@ mod tests {
     #[test]
     fn fails_when_passphrase_is_empty() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let io = FakeIo::with_answers([""]);
 
         // Act
-        let err = run(&args("alice"), &store, &io).unwrap_err();
+        let err = run(&args("alice"), &mut store, &io).unwrap_err();
 
         // Assert
         assert!(err.to_string().contains("passphrase is required"));
@@ -227,18 +227,18 @@ mod tests {
         // Arrange
         let mnemonic = Mnemonic::generate().unwrap();
 
-        let store_a = Store::new_in_memory();
+        let mut store_a = Store::new_in_memory();
         let io_a = FakeIo::with_answers([mnemonic.to_string(), "pass".into(), "pass".into()]);
-        run(&recover_args("bob"), &store_a, &io_a).unwrap();
+        run(&recover_args("bob"), &mut store_a, &io_a).unwrap();
 
-        let store_b = Store::new_in_memory();
+        let mut store_b = Store::new_in_memory();
         let io_b = FakeIo::with_answers([mnemonic.to_string(), "pass".into(), "pass".into()]);
         run(
             &AddArgs {
                 account: 1,
                 ..recover_args("bob")
             },
-            &store_b,
+            &mut store_b,
             &io_b,
         )
         .unwrap();

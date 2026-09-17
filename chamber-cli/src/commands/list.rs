@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn lists_address_pubkey_and_path_for_a_generated_key() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let mnemonic = Mnemonic::generate().unwrap();
         let record = store
             .add("alice", &mnemonic, "pass", Bip44Path::new(0, 0))
@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn shows_not_available_for_a_key_imported_from_a_raw_key() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let key = PrivKey::from_bytes([7u8; 32]).unwrap();
         store.add_privkey("bob", &key, "pass").unwrap();
         let io = FakeIo::default();
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn lists_every_stored_key() {
         // Arrange
-        let store = Store::new_in_memory();
+        let mut store = Store::new_in_memory();
         let io = FakeIo::default();
         let m1 = Mnemonic::generate().unwrap();
         let m2 = Mnemonic::generate().unwrap();
