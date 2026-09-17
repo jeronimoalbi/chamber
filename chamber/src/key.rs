@@ -52,16 +52,34 @@ impl PrivKey {
 
     /// Sign an arbitrary message.
     /// Returns a 64-byte `R || S` signature in low-S form.
-    pub fn sign(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_arbitrary(&self, msg: &[u8]) -> [u8; 64] {
         // Hash to match gno's secp256k1 signer
         let digest = Sha256::digest(msg);
         self.sign_prehashed(&digest.into())
     }
 
-    /// Sign a pre-computed 32-byte digest.
-    /// Use this when the caller has already produced the exact bytes,
-    /// e.g. the canonical-JSON sign-bytes of a `SignDoc`.
-    pub fn sign_prehashed(&self, digest32: &[u8; 32]) -> [u8; 64] {
+    /// Sign a Gno.land transaction `SignDoc`.
+    ///
+    /// **Not implemented yet.**
+    pub fn sign_tx(&self) -> Result<[u8; 64]> {
+        // This crate doesn't support Amino encoding yet, and building a `SignDoc`'s
+        // canonical sign bytes requires it.
+        //
+        // TODO: take a `SignDoc` (or its canonical Amino-JSON sign bytes) once Amino
+        // is supported, and sign it via the crate-private `sign_prehashed`.
+        Err(Error::Unimplemented(
+            "transaction signing requires Amino support, not implemented yet".into(),
+        ))
+    }
+
+    /// Sign a pre-computed 32-byte digest, with no further hashing.
+    ///
+    /// Crate-private: this signs whatever 32 bytes it's given, with no framing or
+    /// context, so it must never be reachable from outside `chamber` — an external
+    /// caller with direct access to it could sign a real transaction's sign-bytes just
+    /// as easily as anything else. Used by [`sign_arbitrary`](Self::sign_arbitrary) and,
+    /// once implemented, by [`sign_tx`](Self::sign_tx).
+    pub(crate) fn sign_prehashed(&self, digest32: &[u8; 32]) -> [u8; 64] {
         // A 32-byte prehash is always signable
         let priv_key = SigningKey::from_slice(&self.0).unwrap();
         let signature: Signature = priv_key.sign_prehash(digest32).unwrap();
@@ -284,7 +302,7 @@ mod tests {
     #[test]
     fn sign_matches_known_vector() {
         // Act
-        let sig = known_priv_key().sign(SIGN_MSG.as_bytes());
+        let sig = known_priv_key().sign_arbitrary(SIGN_MSG.as_bytes());
 
         // Assert
         assert_eq!(hex::encode(sig), SIGN_HEX);
@@ -296,8 +314,8 @@ mod tests {
         let key = known_priv_key();
 
         // Act
-        let first = key.sign(b"some message");
-        let second = key.sign(b"some message");
+        let first = key.sign_arbitrary(b"some message");
+        let second = key.sign_arbitrary(b"some message");
 
         // Assert
         assert_eq!(first, second);
@@ -305,14 +323,14 @@ mod tests {
 
     #[test]
     fn sign_prehashed_matches_sign() {
-        //! The `sign` method is just SHA-256 followed by `sign_prehashed`
+        //! The `sign_arbitrary` method is just SHA-256 followed by `sign_prehashed`
 
         // Arrange
         let key = known_priv_key();
         let digest = Sha256::digest(SIGN_MSG.as_bytes());
 
         // Act
-        let via_sign = key.sign(SIGN_MSG.as_bytes());
+        let via_sign = key.sign_arbitrary(SIGN_MSG.as_bytes());
         let via_prehashed = key.sign_prehashed(&digest.into());
 
         // Assert
@@ -325,7 +343,7 @@ mod tests {
         let key = known_priv_key();
 
         // Act
-        let sig = key.sign(b"round trip message");
+        let sig = key.sign_arbitrary(b"round trip message");
 
         // Assert
         assert!(key.pub_key().verify(b"round trip message", &sig));
@@ -335,7 +353,7 @@ mod tests {
     fn verify_rejects_wrong_message() {
         // Arrange
         let key = known_priv_key();
-        let sig = key.sign(b"the real message");
+        let sig = key.sign_arbitrary(b"the real message");
 
         // Act / Assert
         assert!(!key.pub_key().verify(b"a different message", &sig));
@@ -351,7 +369,7 @@ mod tests {
                 .try_into()
                 .unwrap();
         let other = PrivKey::from_bytes(other_bytes).unwrap();
-        let sig = other.sign(b"shared message");
+        let sig = other.sign_arbitrary(b"shared message");
 
         // Act / Assert
         assert!(!key.pub_key().verify(b"shared message", &sig));
@@ -364,7 +382,7 @@ mod tests {
 
         // Arrange
         let key = known_priv_key();
-        let low_s = key.sign(b"malleability check");
+        let low_s = key.sign_arbitrary(b"malleability check");
         let sig = Signature::from_slice(&low_s).unwrap();
 
         // Act
@@ -373,6 +391,21 @@ mod tests {
 
         // Assert
         assert!(!key.pub_key().verify(b"malleability check", &tampered));
+    }
+
+    #[test]
+    fn sign_tx_is_not_implemented_yet() {
+        //! `sign_tx` is a placeholder until Amino support lands (see `PLAN.md`, Phase B).
+        //! It must fail loudly with a `Result`, not silently misbehave or panic.
+
+        // Act
+        let err = known_priv_key().sign_tx().unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "not implemented: transaction signing requires Amino support, not implemented yet"
+        );
     }
 
     #[test]

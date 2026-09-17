@@ -10,8 +10,8 @@
 //! let key = PrivKey::from_mnemonic(&mnemonic, Bip44Path::default()).unwrap();
 //! println!("{}", key.pub_key().address());
 //!
-//! // Sign arbitrary bytes
-//! let sig = key.sign(b"hello");
+//! // Sign an arbitrary message
+//! let sig = key.sign_arbitrary(b"hello");
 //! assert!(key.pub_key().verify(b"hello", &sig));
 //!
 //! // Store the key encrypted on disk
@@ -21,9 +21,10 @@
 
 #![forbid(unsafe_code)]
 
+mod cipher;
+
 pub mod address;
 pub mod backend;
-mod cipher;
 pub mod error;
 pub mod export;
 pub mod hdpath;

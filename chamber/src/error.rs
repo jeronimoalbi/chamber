@@ -52,6 +52,10 @@ pub enum Error {
     #[error("invalid key name: {0}")]
     InvalidName(String),
 
+    /// Functionality that is planned but not implemented yet.
+    #[error("not implemented: {0}")]
+    Unimplemented(String),
+
     /// Underlying filesystem error.
     #[error("io error: {0}")]
     Io(#[from] io::Error),
