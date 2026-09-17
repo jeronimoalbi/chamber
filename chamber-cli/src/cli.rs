@@ -34,4 +34,7 @@ fn default_home() -> PathBuf {
 pub enum Command {
     /// Create a new key or import one you already have
     Add(AddArgs),
+
+    /// Show the keys you have stored
+    List,
 }

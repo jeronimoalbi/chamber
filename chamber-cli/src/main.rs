@@ -28,5 +28,6 @@ fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Command::Add(args) => commands::add::run(&args, &store, &io),
+        Command::List => commands::list::run(&store, &io),
     }
 }
