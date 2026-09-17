@@ -48,6 +48,10 @@ pub enum Error {
     #[error("key already exists: {0}")]
     AlreadyExists(String),
 
+    /// A key name was empty, too long or invalid.
+    #[error("invalid key name: {0}")]
+    InvalidName(String),
+
     /// Underlying filesystem error.
     #[error("io error: {0}")]
     Io(#[from] io::Error),

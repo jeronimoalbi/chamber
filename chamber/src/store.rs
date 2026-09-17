@@ -16,10 +16,11 @@ use crate::hdpath::Bip44Path;
 use crate::key::PrivKey;
 use crate::mnemonic::Mnemonic;
 
-/// Backend key under which the regenerable index cache (see [`IndexEntry`])
-/// is stored. With [`crate::backend::FsBackend`] this is the `index.json`
-/// file.
+/// Backend key under which the regenerable index cache is stored.
 const INDEX_KEY: &str = "index";
+
+/// Maximum length allowed for a key name.
+const MAX_KEY_NAME_LEN: usize = 64;
 
 /// Record contains data of a single key.
 /// It's usually stored as a single `<name>.json` file.
@@ -96,6 +97,7 @@ impl Store {
         passphrase: &str,
         path: Bip44Path,
     ) -> Result<Record> {
+        ensure_valid_key_name(name)?;
         self.ensure_key_absent(name)?;
 
         let key = PrivKey::from_mnemonic(mnemonic, path)?;
@@ -115,6 +117,7 @@ impl Store {
     /// Add a key from a raw private key, encrypting the 32 bytes under `passphrase`.
     /// Derivation path is not saved in the store.
     pub fn add_privkey(&self, name: &str, key: &PrivKey, passphrase: &str) -> Result<Record> {
+        ensure_valid_key_name(name)?;
         self.ensure_key_absent(name)?;
 
         let blob = cipher::encrypt(&key.to_bytes(), passphrase)?;
@@ -151,6 +154,8 @@ impl Store {
 
     /// Read a key record by local name.
     pub fn get_by_name(&self, name: &str) -> Result<Record> {
+        ensure_valid_key_name(name)?;
+
         let bytes = self
             .backend
             .get(name)?
@@ -189,9 +194,12 @@ impl Store {
 
     /// Delete a key record and refresh the index.
     pub fn delete(&self, name: &str) -> Result<()> {
+        ensure_valid_key_name(name)?;
+
         if !self.backend.exists(name)? {
             return Err(Error::NotFound(name.to_string()));
         }
+
         self.backend.remove(name)?;
         self.rebuild_index()?;
         Ok(())
@@ -237,6 +245,29 @@ impl Store {
     }
 }
 
+fn ensure_valid_key_name(name: &str) -> Result<()> {
+    if name.is_empty() || name.len() > MAX_KEY_NAME_LEN {
+        return Err(Error::InvalidName(format!(
+            "name must not be empty and have a max of {MAX_KEY_NAME_LEN} characters, got {}",
+            name.len()
+        )));
+    }
+
+    if name == INDEX_KEY {
+        return Err(Error::InvalidName(format!("{name:?} is a reserved name")));
+    }
+
+    if !name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        return Err(Error::InvalidName(format!(
+            "name {name:?} may only contain ASCII letters, digits, '_' and '-'"
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +310,127 @@ mod tests {
 
         // Assert
         assert_eq!(err.to_string(), "key already exists: dup");
+    }
+
+    #[test]
+    fn add_rejects_reserved_index_name() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act
+        let err = store
+            .add("index", &test_mnemonic(), "pass", Bip44Path::default())
+            .unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "invalid key name: \"index\" is a reserved name"
+        );
+        assert!(store.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn add_privkey_rejects_reserved_index_name() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act
+        let err = store.add_privkey("index", &test_key(), "pass").unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "invalid key name: \"index\" is a reserved name"
+        );
+    }
+
+    #[test]
+    fn add_rejects_name_with_path_traversal_characters() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act
+        let err = store
+            .add("../escape", &test_mnemonic(), "pass", Bip44Path::default())
+            .unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "invalid key name: name \"../escape\" may only contain ASCII letters, \
+             digits, '_' and '-'"
+        );
+    }
+
+    #[test]
+    fn add_rejects_empty_name() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act
+        let err = store
+            .add("", &test_mnemonic(), "pass", Bip44Path::default())
+            .unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "invalid key name: name must not be empty and have a max of 64 characters, got 0"
+        );
+    }
+
+    #[test]
+    fn add_rejects_overlong_name() {
+        // Arrange
+        let store = Store::new_in_memory();
+        let name = "a".repeat(65);
+
+        // Act
+        let err = store
+            .add(&name, &test_mnemonic(), "pass", Bip44Path::default())
+            .unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "invalid key name: name must not be empty and have a max of 64 characters, got 65"
+        );
+    }
+
+    #[test]
+    fn get_by_name_rejects_invalid_name() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act
+        let err = store.get_by_name("../etc/passwd").unwrap_err();
+
+        // Assert
+        assert!(err.to_string().starts_with("invalid key name:"));
+    }
+
+    #[test]
+    fn delete_rejects_invalid_name() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act
+        let err = store.delete("../etc/passwd").unwrap_err();
+
+        // Assert
+        assert!(err.to_string().starts_with("invalid key name:"));
+    }
+
+    #[test]
+    fn valid_names_allow_letters_digits_underscore_and_dash() {
+        // Arrange
+        let store = Store::new_in_memory();
+
+        // Act / Assert
+        store
+            .add_privkey("Alice_Key-2", &test_key(), "pass")
+            .unwrap();
     }
 
     #[test]
