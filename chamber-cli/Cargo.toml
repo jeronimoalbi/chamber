@@ -1,0 +1,16 @@
+[package]
+name = "chamber-cli"
+version = "0.1.0"
+edition = "2024"
+description = "A friendly command-line wallet for gno.land keys"
+
+[[bin]]
+name = "chamber"
+path = "src/main.rs"
+
+[dependencies]
+chamber = { package = "chamber-gnoland", path = "../chamber" }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+rpassword = "7"
+directories = "5"

@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "chamber",
+    "chamber-cli",
+]
+resolver = "3"
