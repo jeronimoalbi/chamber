@@ -1,12 +1,14 @@
 use std::io::{self, Write};
 
+use zeroize::Zeroizing;
+
 /// Io defines an abstraction for input/output interactions.
 pub trait Io {
     /// Print a line of normal output.
     fn print_line(&self, msg: &str);
 
     /// Ask for something sensitive where the terminal must not echo what is typed.
-    fn prompt_password(&self, prompt: &str) -> io::Result<String>;
+    fn prompt_password(&self, prompt: &str) -> io::Result<Zeroizing<String>>;
 
     /// Ask for a plain line of text echoed normally as it's typed.
     fn prompt_line(&self, prompt: &str) -> io::Result<String>;
@@ -20,8 +22,8 @@ impl Io for TermIo {
         println!("{msg}");
     }
 
-    fn prompt_password(&self, prompt: &str) -> io::Result<String> {
-        rpassword::prompt_password(prompt)
+    fn prompt_password(&self, prompt: &str) -> io::Result<Zeroizing<String>> {
+        rpassword::prompt_password(prompt).map(Zeroizing::new)
     }
 
     fn prompt_line(&self, prompt: &str) -> io::Result<String> {
@@ -66,8 +68,8 @@ pub mod testing {
             self.printed.borrow_mut().push(msg.to_string());
         }
 
-        fn prompt_password(&self, prompt: &str) -> io::Result<String> {
-            self.prompt_line(prompt)
+        fn prompt_password(&self, prompt: &str) -> io::Result<Zeroizing<String>> {
+            self.prompt_line(prompt).map(Zeroizing::new)
         }
 
         fn prompt_line(&self, prompt: &str) -> io::Result<String> {

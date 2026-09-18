@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use chamber::hdpath::Bip44Path;
 use chamber::{Error as ChamberError, Mnemonic, Store};
 use clap::Args;
+use zeroize::Zeroizing;
 
 use crate::io::Io;
 
@@ -36,9 +37,12 @@ pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
     }
 
     let (mnemonic, is_memonic_generated) = if args.recover {
-        let phrase = io
-            .prompt_line("Enter your 24 words recovery phrase: ")
-            .context("failed to read the recovery phrase")?;
+        // A recovery phrase is the key itself, so wipe our copy of the typed
+        // line rather than leaving it to be dropped as an ordinary String.
+        let phrase = Zeroizing::new(
+            io.prompt_line("Enter your 24 words recovery phrase: ")
+                .context("failed to read the recovery phrase")?,
+        );
         let mnemonic = Mnemonic::parse(&phrase).context("invalid recovery phrase")?;
         (mnemonic, false)
     } else {
@@ -74,7 +78,7 @@ fn print_mnemonic_warning(io: &impl Io, mnemonic: &Mnemonic) {
     io.print_line("------------------------------------------------------------------");
     io.print_line("⚠  Write this recovery phrase down and keep it somewhere safe.");
     io.print_line("");
-    io.print_line(&mnemonic.to_string());
+    io.print_line(&mnemonic.phrase());
     io.print_line("");
     io.print_line("This phrase is the ONLY way to recover this key if you lose access");
     io.print_line("to this computer. Anyone who gets hold of it can take everything it");

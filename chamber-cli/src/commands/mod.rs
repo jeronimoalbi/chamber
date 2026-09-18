@@ -5,11 +5,12 @@ pub mod import;
 pub mod list;
 
 use anyhow::{Context, Result, bail};
+use zeroize::Zeroizing;
 
 use crate::io::Io;
 
 /// Ask for a new passphrase twice, failing if it's empty or the two entries don't match.
-pub(crate) fn prompt_passphrase(io: &impl Io, prompt: &str) -> Result<String> {
+pub(crate) fn prompt_passphrase(io: &impl Io, prompt: &str) -> Result<Zeroizing<String>> {
     let first = io
         .prompt_password(prompt)
         .context("failed to read the passphrase")?;
@@ -68,7 +69,7 @@ mod tests {
         let passphrase = prompt_passphrase(&io, "Enter a passphrase: ").unwrap();
 
         // Assert
-        assert_eq!(passphrase, "secret");
+        assert_eq!(passphrase.as_str(), "secret");
     }
 
     #[test]

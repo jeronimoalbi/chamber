@@ -194,6 +194,7 @@ dependencies = [
  "directories",
  "rpassword",
  "tempfile",
+ "zeroize",
 ]
 
 [[package]]
