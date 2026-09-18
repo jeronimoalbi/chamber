@@ -8,6 +8,7 @@
 //! The size of the derived seed is 64 bytes (512 bits).
 
 use getrandom::getrandom;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::{Error, Result};
 
@@ -27,6 +28,7 @@ impl Mnemonic {
 
         // TODO: Support other languages
         let mnemonic = bip39::Mnemonic::from_entropy(&entropy);
+        entropy.zeroize();
         let mnemonic = mnemonic.map_err(|e| Error::Mnemonic(e.to_string()))?;
         Ok(Self(mnemonic))
     }
@@ -49,14 +51,14 @@ impl Mnemonic {
     }
 
     /// The 64-byte BIP39 seed.
-    pub fn to_seed(&self) -> [u8; 64] {
+    pub fn to_seed(&self) -> Zeroizing<[u8; 64]> {
         // Use an empty passphrase to match gnokey's implementation
-        self.0.to_seed("")
+        Zeroizing::new(self.0.to_seed(""))
     }
 
     /// The mnemonic phrase as single-space separated lowercase words.
-    pub fn phrase(&self) -> String {
-        self.0.to_string()
+    pub fn phrase(&self) -> Zeroizing<String> {
+        Zeroizing::new(self.0.to_string())
     }
 
     /// Word count of this mnemonic.
@@ -167,7 +169,7 @@ mod tests {
 
             // Assert
             assert_eq!(mnemonic.word_count(), Mnemonic::WORDS);
-            assert_eq!(mnemonic.phrase(), phrase);
+            assert_eq!(mnemonic.phrase().as_str(), phrase);
         }
     }
 
@@ -180,7 +182,7 @@ mod tests {
         let mnemonic = Mnemonic::parse(&padded).unwrap();
 
         // Assert
-        assert_eq!(mnemonic.phrase(), ZERO_ENTROPY_24_WORDS);
+        assert_eq!(mnemonic.phrase().as_str(), ZERO_ENTROPY_24_WORDS);
     }
 
     #[test]
@@ -265,7 +267,7 @@ mod tests {
         let displayed = mnemonic.to_string();
 
         // Assert
-        assert_eq!(displayed, mnemonic.phrase());
+        assert_eq!(displayed, mnemonic.phrase().as_str());
     }
 
     #[test]
@@ -278,7 +280,7 @@ mod tests {
 
         // Assert
         assert!(debug_output.contains("24"));
-        assert!(!debug_output.contains(&mnemonic.phrase()));
+        assert!(!debug_output.contains(mnemonic.phrase().as_str()));
         assert!(!debug_output.contains("abandon"));
     }
 

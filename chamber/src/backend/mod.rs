@@ -68,7 +68,7 @@ pub(crate) mod test_support {
     /// about a record's identity/shape, not its cryptographic content.
     pub(crate) fn record(name: &str) -> Record {
         let key = PrivKey::from_bytes([7u8; 32]).unwrap();
-        let blob = cipher::encrypt(&key.to_bytes(), "pass").unwrap();
+        let blob = cipher::encrypt(key.to_bytes().as_slice(), "pass").unwrap();
         Record {
             name: name.to_string(),
             address: key.pub_key().address().to_bech32(),

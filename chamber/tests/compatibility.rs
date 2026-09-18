@@ -55,7 +55,7 @@ fn derivation_matches_gno() {
         let path = parse_bip44_path(&d.path);
         assert_eq!(path.to_string(), d.path, "path string round-trip");
 
-        let raw = hdpath::derive_bip44(&seed, path).unwrap();
+        let raw = hdpath::derive_bip44(seed.as_slice(), path).unwrap();
         assert_eq!(hex::encode(raw), d.priv_hex, "priv key for {}", d.path);
 
         let key = PrivKey::from_bytes(raw).unwrap();

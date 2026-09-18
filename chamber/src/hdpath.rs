@@ -4,6 +4,7 @@ use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::{FieldBytes, Scalar, SecretKey, U256};
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
+use zeroize::Zeroize;
 
 use crate::error::{Error, Result};
 
@@ -45,11 +46,13 @@ fn split_hmac_sha512(key: &[u8], data: &[u8]) -> ([u8; 32], [u8; 32]) {
     let mut mac = HmacSha512::new_from_slice(key).unwrap();
     mac.update(data);
 
-    let out = mac.finalize().into_bytes();
+    let mut out = [0u8; 64];
+    out.copy_from_slice(mac.finalize().into_bytes().as_slice());
     let mut il = [0u8; 32];
     let mut ir = [0u8; 32];
     il.copy_from_slice(&out[..32]);
     ir.copy_from_slice(&out[32..]);
+    out.zeroize();
     (il, ir)
 }
 
@@ -85,7 +88,8 @@ fn derive_child(
 
     data.extend_from_slice(&idx.to_be_bytes());
 
-    let (il, chain_code2) = split_hmac_sha512(chain_code, &data);
+    let (mut il, chain_code2) = split_hmac_sha512(chain_code, &data);
+    data.zeroize();
 
     // No "next index" retry, strict BIP32 says that if the HMAC left-half is
     // `>= n`, or the resulting child scalar is zero, you must skip to the next
@@ -93,6 +97,7 @@ fn derive_child(
     // here via k256's Scalar arithmetic.
     let child = scalar_from_bigendian(priv_key) + scalar_from_bigendian(&il);
     let child_bytes: [u8; 32] = child.to_bytes().into();
+    il.zeroize();
 
     (child_bytes, chain_code2)
 }
@@ -120,17 +125,23 @@ pub fn derive_private_key_for_path(
             .parse()
             .map_err(|_| Error::Path(format!("invalid BIP32 path element {part:?}")))?;
         let (k, c) = derive_child(&key, &chain_code, idx, harden);
+        key.zeroize();
+        chain_code.zeroize();
         key = k;
         chain_code = c;
     }
 
+    chain_code.zeroize();
     Ok(key)
 }
 
 /// Derive the leaf private key for a path directly from a BIP39 seed.
 pub fn derive_bip44(seed: &[u8], path: Bip44Path) -> Result<[u8; 32]> {
-    let (master, chain_code) = master_from_seed(seed);
-    derive_private_key_for_path(&master, &chain_code, &path.to_string())
+    let (mut master, mut chain_code) = master_from_seed(seed);
+    let result = derive_private_key_for_path(&master, &chain_code, &path.to_string());
+    master.zeroize();
+    chain_code.zeroize();
+    result
 }
 
 #[cfg(test)]

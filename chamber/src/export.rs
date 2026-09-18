@@ -214,7 +214,7 @@ mod tests {
         assert!(bundle.path.is_none());
 
         let plain = cipher::decrypt(&bundle.privkey_encrypted, "transfer-pass").unwrap();
-        assert_eq!(plain.as_slice(), test_key().to_bytes());
+        assert_eq!(plain.as_slice(), test_key().to_bytes().as_slice());
     }
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
 
         // Assert
         let plain = cipher::decrypt(&bundle.privkey_encrypted, "store-pass").unwrap();
-        assert_eq!(plain.as_slice(), test_key().to_bytes());
+        assert_eq!(plain.as_slice(), test_key().to_bytes().as_slice());
     }
 
     #[test]

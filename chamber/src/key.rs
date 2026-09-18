@@ -4,7 +4,7 @@ use k256::ecdsa::{Signature, SigningKey};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::address::Address;
 use crate::error::{Error, Result};
@@ -25,18 +25,20 @@ impl PrivKey {
     /// Derive the key at `path` from a mnemonic.
     pub fn from_mnemonic(mnemonic: &Mnemonic, path: Bip44Path) -> Result<Self> {
         let seed = mnemonic.to_seed();
-        let raw = hdpath::derive_bip44(&seed, path)?;
-        Self::from_bytes(raw)
+        let mut raw = hdpath::derive_bip44(seed.as_slice(), path)?;
+        let key = Self::from_bytes(raw);
+        raw.zeroize();
+        key
     }
 
     /// The 32 raw private-key bytes.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
+    pub fn to_bytes(&self) -> Zeroizing<[u8; 32]> {
+        Zeroizing::new(self.0)
     }
 
     /// Lowercase hex of the private key.
-    pub fn to_hex(&self) -> String {
-        self.0.iter().map(|b| format!("{b:02x}")).collect()
+    pub fn to_hex(&self) -> Zeroizing<String> {
+        Zeroizing::new(self.0.iter().map(|b| format!("{b:02x}")).collect())
     }
 
     /// The compressed public key.
@@ -196,7 +198,7 @@ mod tests {
         let key = PrivKey::from_bytes(bytes).unwrap();
 
         // Assert
-        assert_eq!(key.to_bytes(), bytes);
+        assert_eq!(*key.to_bytes(), bytes);
     }
 
     #[test]
@@ -231,7 +233,7 @@ mod tests {
         let key = PrivKey::from_mnemonic(&mnemonic, Bip44Path::default()).unwrap();
 
         // Assert
-        assert_eq!(key.to_hex(), KNOWN_PRIV_HEX);
+        assert_eq!(key.to_hex().as_str(), KNOWN_PRIV_HEX);
         assert_eq!(key.pub_key().to_hex(), KNOWN_PUB_HEX);
         assert_eq!(key.pub_key().address().to_bech32(), KNOWN_ADDRESS);
     }
@@ -243,8 +245,8 @@ mod tests {
 
         // Assert
         assert_eq!(hex.len(), 64);
-        assert_eq!(hex, hex.to_lowercase());
-        assert_eq!(hex, KNOWN_PRIV_HEX);
+        assert_eq!(hex.as_str(), hex.to_lowercase());
+        assert_eq!(hex.as_str(), KNOWN_PRIV_HEX);
     }
 
     #[test]

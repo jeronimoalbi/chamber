@@ -50,7 +50,7 @@ impl Store {
         ensure_valid_key_name(name)?;
 
         let key = PrivKey::from_mnemonic(mnemonic, path)?;
-        let blob = cipher::encrypt(&key.to_bytes(), passphrase)?;
+        let blob = cipher::encrypt(key.to_bytes().as_slice(), passphrase)?;
         let record = Record {
             name: name.to_string(),
             address: key.pub_key().address().to_bech32(),
@@ -67,7 +67,7 @@ impl Store {
     pub fn add_privkey(&mut self, name: &str, key: &PrivKey, passphrase: &str) -> Result<Record> {
         ensure_valid_key_name(name)?;
 
-        let blob = cipher::encrypt(&key.to_bytes(), passphrase)?;
+        let blob = cipher::encrypt(key.to_bytes().as_slice(), passphrase)?;
         let record = Record {
             name: name.to_string(),
             address: key.pub_key().address().to_bech32(),
