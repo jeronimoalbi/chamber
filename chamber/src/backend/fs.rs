@@ -27,6 +27,7 @@ impl FsBackend {
     pub fn open(dir: impl AsRef<Path>) -> Result<Self> {
         let dir = dir.as_ref();
         fs::create_dir_all(dir)?;
+        restrict_keys_dir_access(dir)?;
         Ok(Self {
             path: dir.join(KEYS_FILE),
         })
@@ -99,6 +100,19 @@ impl Backend for FsBackend {
     }
 }
 
+#[cfg(unix)]
+fn restrict_keys_dir_access(dir: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn restrict_keys_dir_access(_dir: &Path) -> Result<()> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,6 +132,25 @@ mod tests {
 
         // Assert
         assert!(missing.is_dir());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn fs_backend_open_restricts_directory_access() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Arrange
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("store");
+        fs::create_dir_all(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Act
+        FsBackend::open(&dir).unwrap();
+
+        // Assert
+        let mode = fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
     }
 
     #[test]
