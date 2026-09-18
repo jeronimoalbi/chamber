@@ -23,10 +23,10 @@ pub fn run(args: &DeleteArgs, store: &mut Store, io: &impl Io) -> Result<()> {
         ))
         .context("failed to read the passphrase")?;
 
-    // Verify the passphrase before removing anything (Store::delete does
-    // not check it).
+    // Verify the passphrase before removing anything
     match store.unlock(&args.name, &passphrase) {
-        Ok(_) => {}
+        // A tampered record still proves the passphrase was right
+        Ok(_) | Err(ChamberError::Tampered(_)) => {}
         Err(ChamberError::Decrypt) => bail!("wrong passphrase, nothing deleted"),
         Err(err) => return Err(err.into()),
     }
@@ -40,6 +40,7 @@ pub fn run(args: &DeleteArgs, store: &mut Store, io: &impl Io) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use chamber::Mnemonic;
+    use chamber::backend::{Backend, MemoryBackend};
     use chamber::hdpath::Bip44Path;
 
     use super::*;
@@ -90,6 +91,51 @@ mod tests {
         // Assert
         assert!(err.to_string().contains("no key named \"ghost\""));
         assert!(io.prompted.borrow().is_empty());
+    }
+
+    #[test]
+    fn deletes_a_tampered_record_given_the_right_passphrase() {
+        //! A tampered record is the one a user most needs to remove, and
+        //! reaching the tamper check already proves the passphrase was
+        //! right, so deletion must still go through.
+
+        // Arrange
+        let mut seeded = Store::new_in_memory();
+        seed(&mut seeded, "alice", "secret pass");
+        let mut record = seeded.get_by_name("alice").unwrap();
+        record.address = "g1attackercontrolledaddress00000000000".to_string();
+
+        let mut backend = MemoryBackend::new();
+        backend.insert(record).unwrap();
+        let mut store = Store::new(backend);
+        let io = FakeIo::with_answers(["secret pass"]);
+
+        // Act
+        run(&args("alice"), &mut store, &io).unwrap();
+
+        // Assert
+        assert!(store.get_by_name("alice").is_err());
+    }
+
+    #[test]
+    fn a_tampered_record_still_needs_the_right_passphrase_to_delete() {
+        // Arrange
+        let mut seeded = Store::new_in_memory();
+        seed(&mut seeded, "alice", "secret pass");
+        let mut record = seeded.get_by_name("alice").unwrap();
+        record.address = "g1attackercontrolledaddress00000000000".to_string();
+
+        let mut backend = MemoryBackend::new();
+        backend.insert(record).unwrap();
+        let mut store = Store::new(backend);
+        let io = FakeIo::with_answers(["wrong pass"]);
+
+        // Act
+        let err = run(&args("alice"), &mut store, &io).unwrap_err();
+
+        // Assert
+        assert!(err.to_string().contains("wrong passphrase"));
+        assert!(store.get_by_name("alice").is_ok());
     }
 
     #[test]
