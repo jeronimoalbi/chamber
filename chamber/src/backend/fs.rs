@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +11,9 @@ use crate::error::{Error, Result};
 /// Name of the file used to store keys.
 const KEYS_FILE: &str = "keys.json";
 
+/// Name of the file coordinating writes between processes.
+const LOCK_FILE: &str = "keys.json.lock";
+
 /// Document stores all filesystem keys.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Document {
@@ -20,6 +23,7 @@ struct Document {
 /// Backend that persists every record of a store as one JSON file,
 pub struct FsBackend {
     path: PathBuf,
+    lock_path: PathBuf,
 }
 
 impl FsBackend {
@@ -30,7 +34,20 @@ impl FsBackend {
         restrict_keys_dir_access(dir)?;
         Ok(Self {
             path: dir.join(KEYS_FILE),
+            lock_path: dir.join(LOCK_FILE),
         })
+    }
+
+    /// Create a lock file for exclusive modification of the keys file.
+    /// Lock is released when the returned file is dropped.
+    fn lock(&self) -> Result<File> {
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&self.lock_path)?;
+        file.lock()?;
+        Ok(file)
     }
 
     fn read(&self) -> Result<Document> {
@@ -60,6 +77,7 @@ impl FsBackend {
 
 impl Backend for FsBackend {
     fn insert(&mut self, record: Record) -> Result<()> {
+        let _lock = self.lock()?;
         let mut doc = self.read()?;
         if doc.keys.iter().any(|r| r.name == record.name) {
             return Err(Error::AlreadyExists(record.name));
@@ -70,6 +88,7 @@ impl Backend for FsBackend {
     }
 
     fn update(&mut self, record: Record) -> Result<()> {
+        let _lock = self.lock()?;
         let mut doc = self.read()?;
         let key = doc
             .keys
@@ -85,6 +104,7 @@ impl Backend for FsBackend {
     }
 
     fn remove(&mut self, name: &str) -> Result<()> {
+        let _lock = self.lock()?;
         let mut doc = self.read()?;
         let key_count = doc.keys.len();
         doc.keys.retain(|r| r.name != name);
@@ -115,6 +135,8 @@ fn restrict_keys_dir_access(_dir: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+
     use super::*;
 
     fn test_record(name: &str) -> Record {
@@ -275,10 +297,57 @@ mod tests {
         backend.insert(test_record("alice")).unwrap();
 
         // Assert
-        let entries: Vec<_> = fs::read_dir(dir.path())
+        let mut entries: Vec<_> = fs::read_dir(dir.path())
             .unwrap()
             .map(|e| e.unwrap().file_name())
             .collect();
-        assert_eq!(entries, vec![std::ffi::OsString::from(KEYS_FILE)]);
+        entries.sort();
+        assert_eq!(
+            entries,
+            vec![OsString::from(KEYS_FILE), OsString::from(LOCK_FILE)]
+        );
+    }
+
+    #[test]
+    fn concurrent_writers_do_not_lose_records() {
+        //! Every mutation is a read-modify-write though a file lock, so multiple
+        //! modifications to the keys file should succeed and not step on each other.
+
+        use std::sync::Barrier;
+
+        // Arrange
+        let dir = tempfile::tempdir().unwrap();
+        FsBackend::open(dir.path()).unwrap();
+
+        let base = test_record("base");
+        let create_record = |i: usize| {
+            let mut record = base.clone();
+            record.name = format!("key{i}");
+            record
+        };
+
+        let barrier = &Barrier::new(2);
+        let path = dir.path();
+
+        // Act
+        std::thread::scope(|scope| {
+            for thread in 0..2 {
+                let records: Vec<Record> = (0..5).map(|i| create_record(thread * 5 + i)).collect();
+
+                // Start a thread that inserts 5 records
+                scope.spawn(move || {
+                    let mut backend = FsBackend::open(path).unwrap();
+
+                    barrier.wait(); // Sync threads to start at the same time
+                    for record in records {
+                        backend.insert(record).unwrap();
+                    }
+                });
+            }
+        });
+
+        // Assert
+        let backend = FsBackend::open(dir.path()).unwrap();
+        assert_eq!(backend.list().unwrap().len(), 10);
     }
 }
