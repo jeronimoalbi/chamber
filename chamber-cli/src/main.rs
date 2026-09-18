@@ -22,8 +22,9 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let mut store = chamber::Store::open(&cli.home)
-        .with_context(|| format!("failed to open {}", cli.home.display()))?;
+    let home = cli.home()?;
+    let mut store = chamber::Store::open(&home)
+        .with_context(|| format!("failed to open {}", home.display()))?;
     let io = TermIo;
 
     match cli.command {
