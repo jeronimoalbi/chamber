@@ -107,22 +107,16 @@ impl Store {
     /// Decrypt a key and return a [`PrivKey`].
     pub fn unlock(&self, name: &str, passphrase: &str) -> Result<PrivKey> {
         let record = self.get_by_name(name)?;
-        let plain = Zeroizing::new(cipher::decrypt(&record.privkey_encrypted, passphrase)?);
-        let bytes: [u8; 32] = plain
-            .as_slice()
-            .try_into()
-            .map_err(|_| Error::KeystoreFormat("privkey blob must be 32 bytes".into()))?;
-        PrivKey::from_bytes(bytes)
+        decrypt_and_verify(&record, passphrase)
     }
 
     /// Re-encrypt a key's secret under a new passphrase.
-    /// The stored plaintext is unchanged.
     pub fn rotate(&mut self, name: &str, old_passphrase: &str, new_passphrase: &str) -> Result<()> {
         ensure_valid_key_name(name)?;
 
         let mut record = self.get_by_name(name)?;
-        let plain = Zeroizing::new(cipher::decrypt(&record.privkey_encrypted, old_passphrase)?);
-        record.privkey_encrypted = cipher::encrypt(&plain, new_passphrase)?;
+        let key = decrypt_and_verify(&record, old_passphrase)?;
+        record.privkey_encrypted = cipher::encrypt(key.to_bytes().as_slice(), new_passphrase)?;
         self.backend.update(record)
     }
 
@@ -139,6 +133,29 @@ impl Store {
     pub fn open(dir: impl AsRef<Path>) -> Result<Self> {
         Ok(Self::new(FsBackend::open(dir)?))
     }
+}
+
+fn decrypt_and_verify(record: &Record, passphrase: &str) -> Result<PrivKey> {
+    // Decrypt
+    let plain = Zeroizing::new(cipher::decrypt(&record.privkey_encrypted, passphrase)?);
+    let bytes: [u8; 32] = plain
+        .as_slice()
+        .try_into()
+        .map_err(|_| Error::KeystoreFormat("privkey blob must be 32 bytes".into()))?;
+    let key = PrivKey::from_bytes(bytes)?;
+
+    // Verify that public key and address are right
+    let pub_key = key.pub_key();
+    let pubkey_b64 = B64.encode(pub_key.to_bytes());
+    let address = pub_key.address().to_bech32();
+    if pubkey_b64 != record.pubkey_b64 || address != record.address {
+        return Err(Error::Tampered(format!(
+            "record {:?} claims pubkey {} / address {}, but the decrypted key is {} / {}",
+            record.name, record.pubkey_b64, record.address, pubkey_b64, address
+        )));
+    }
+
+    Ok(key)
 }
 
 fn ensure_valid_key_name(name: &str) -> Result<()> {
@@ -386,6 +403,89 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "keystore decryption failed (wrong passphrase or corrupted data)"
+        );
+    }
+
+    #[test]
+    fn unlock_detects_tampered_address() {
+        // Arrange
+        let key = test_key();
+        let blob = cipher::encrypt(key.to_bytes().as_slice(), "pass").unwrap();
+        let tampered = Record {
+            name: "main".to_string(),
+            address: "g1attackercontrolledaddress00000000000".to_string(),
+            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            path: None,
+            privkey_encrypted: blob,
+        };
+        let mut backend = MemoryBackend::new();
+        backend.insert(tampered).unwrap();
+        let store = Store::new(backend);
+
+        // Act
+        let err = store.unlock("main", "pass").unwrap_err();
+
+        // Assert
+        assert!(
+            err.to_string()
+                .starts_with("keystore record tampered with:")
+        );
+    }
+
+    #[test]
+    fn unlock_detects_tampered_pubkey() {
+        // Arrange
+        let key = test_key();
+        let other_pubkey = PrivKey::from_bytes([9u8; 32]).unwrap().pub_key();
+        let blob = cipher::encrypt(key.to_bytes().as_slice(), "pass").unwrap();
+        let tampered = Record {
+            name: "main".to_string(),
+            address: key.pub_key().address().to_bech32(),
+            pubkey_b64: B64.encode(other_pubkey.to_bytes()),
+            path: None,
+            privkey_encrypted: blob,
+        };
+        let mut backend = MemoryBackend::new();
+        backend.insert(tampered).unwrap();
+        let store = Store::new(backend);
+
+        // Act
+        let err = store.unlock("main", "pass").unwrap_err();
+
+        // Assert
+        assert!(
+            err.to_string()
+                .starts_with("keystore record tampered with:")
+        );
+    }
+
+    #[test]
+    fn rotate_detects_tampered_record_and_leaves_it_untouched() {
+        // Arrange
+        let key = test_key();
+        let blob = cipher::encrypt(key.to_bytes().as_slice(), "old").unwrap();
+        let tampered = Record {
+            name: "main".to_string(),
+            address: "g1attackercontrolledaddress00000000000".to_string(),
+            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            path: None,
+            privkey_encrypted: blob,
+        };
+        let mut backend = MemoryBackend::new();
+        backend.insert(tampered).unwrap();
+        let mut store = Store::new(backend);
+
+        // Act
+        let err = store.rotate("main", "old", "new").unwrap_err();
+
+        // Assert
+        assert!(
+            err.to_string()
+                .starts_with("keystore record tampered with:")
+        );
+        assert_eq!(
+            store.get_by_name("main").unwrap().address,
+            "g1attackercontrolledaddress00000000000"
         );
     }
 

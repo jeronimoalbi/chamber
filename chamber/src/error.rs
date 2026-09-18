@@ -30,6 +30,10 @@ pub enum Error {
     #[error("keystore format error: {0}")]
     KeystoreFormat(String),
 
+    /// Keystore data has been tampered with.
+    #[error("keystore record tampered with: {0}")]
+    Tampered(String),
+
     /// A storage [`crate::backend::Backend`] failed for a reason of its own.
     #[error("storage backend error: {0}")]
     Backend(String),
