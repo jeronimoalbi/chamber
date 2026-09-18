@@ -1,6 +1,6 @@
 # Chamber
 
-A Rust wallet library for [Gno.land](https://gno.land).
+A wallet and keychain for [Gno.land](https://gno.land).
 
 [![Work in Progress][wip-badge]][wip-url]
 [![Build Status][ci-badge]][ci-url]
