@@ -12,14 +12,10 @@ pub fn run(store: &Store, io: &impl Io) -> Result<()> {
     }
 
     for entry in &entries {
-        let record = store
-            .get_by_name(&entry.name)
-            .with_context(|| format!("failed to read key \"{}\"", entry.name))?;
-
         io.print_line(&format!("\"{}\"", entry.name));
         io.print_line(&format!("  address: {}", entry.address));
         io.print_line(&format!("  pubkey:  {} (base64)", entry.pubkey_b64));
-        match record.path {
+        match entry.path {
             Some(path) => io.print_line(&format!("  path:    {path}")),
             None => io.print_line("  path:    n/a (imported from a raw key)"),
         }
