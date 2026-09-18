@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 
 use crate::commands::add::AddArgs;
+use crate::commands::delete::DeleteArgs;
 
 /// A wallet for managing your Gno.land keys.
 #[derive(Debug, Parser)]
@@ -34,6 +35,9 @@ fn default_home() -> PathBuf {
 pub enum Command {
     /// Create a new key or import one you already have
     Add(AddArgs),
+
+    /// Delete a key from the store
+    Delete(DeleteArgs),
 
     /// Show the keys you have stored
     List,
