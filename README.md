@@ -2,6 +2,7 @@
 
 A Rust wallet library for [Gno.land](https://gno.land).
 
+[![Work in Progress][wip-badge]][wip-url]
 [![Build Status][ci-badge]][ci-url]
 [![MIT licensed][mit-badge]][mit-url]
 
@@ -9,14 +10,6 @@ Chamber provides key generation, HD derivation, addresses, secp256k1
 signing, and an encrypted keystore.
 
 The crate is `#![forbid(unsafe_code)]`.
-
-> **TODO**: Transaction building and signing
-
-## Installation
-
-```sh
-cargo add chamber-gnoland
-```
 
 ## Example
 
@@ -47,6 +40,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 This project is licensed under the [MIT license][mit-url].
 
+[wip-badge]: https://img.shields.io/badge/status-Work%20In%20Progress-8A2BE2
+[wip-url]: #chamber
 [ci-badge]: https://github.com/jeronimoalbi/chamber/actions/workflows/ci.yml/badge.svg
 [ci-url]: https://github.com/jeronimoalbi/chamber/actions/workflows/ci.yml
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
