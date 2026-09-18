@@ -11,7 +11,7 @@ use crate::cipher::{self, EncryptedBlob};
 use crate::error::{Error, Result};
 use crate::hdpath::Bip44Path;
 use crate::key::PrivKey;
-use crate::store::Store;
+use crate::store::{Store, decrypt_and_verify};
 
 pub const EXPORT_FORMAT: &str = "chamber-keyexport-v1";
 
@@ -59,17 +59,18 @@ impl Store {
         transfer_passphrase: &str,
     ) -> Result<ExportBundle> {
         let record = self.get_by_name(name)?;
-        let plain = Zeroizing::new(cipher::decrypt(
-            &record.privkey_encrypted,
-            store_passphrase,
-        )?);
+        let key = decrypt_and_verify(&record, store_passphrase)?;
+
+        // Derived from the key that just decrypted, not copied from the
+        // record, so the bundle can only ever describe the key it carries.
+        let pub_key = key.pub_key();
         Ok(ExportBundle {
             format: EXPORT_FORMAT.to_string(),
             name: record.name,
-            address: record.address,
-            pubkey_b64: record.pubkey_b64,
+            address: pub_key.address().to_bech32(),
+            pubkey_b64: B64.encode(pub_key.to_bytes()),
             path: record.path,
-            privkey_encrypted: cipher::encrypt(&plain, transfer_passphrase)?,
+            privkey_encrypted: cipher::encrypt(key.to_bytes().as_slice(), transfer_passphrase)?,
         })
     }
 
@@ -164,6 +165,7 @@ pub fn decode_armor(text: &str) -> Result<ExportBundle> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::{Backend, MemoryBackend};
 
     fn test_key() -> PrivKey {
         PrivKey::from_bytes([7u8; 32]).unwrap()
@@ -253,6 +255,31 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "keystore decryption failed (wrong passphrase or corrupted data)"
+        );
+    }
+
+    #[test]
+    fn export_key_detects_tampered_record() {
+        //! A record whose plaintext `address` was swapped must not be exportable
+
+        // Arrange
+        let seeded = seeded_store();
+        let mut record = seeded.get_by_name("alice").unwrap();
+        record.address = "g1attackercontrolledaddress00000000000".to_string();
+
+        let mut backend = MemoryBackend::new();
+        backend.insert(record).unwrap();
+        let store = Store::new(backend);
+
+        // Act
+        let err = store
+            .export_key("alice", "store-pass", "transfer-pass")
+            .unwrap_err();
+
+        // Assert
+        assert!(
+            err.to_string()
+                .starts_with("keystore record tampered with:")
         );
     }
 

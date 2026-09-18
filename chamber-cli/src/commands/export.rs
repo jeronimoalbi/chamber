@@ -45,7 +45,7 @@ pub fn run(args: &ExportArgs, store: &Store, io: &impl Io) -> Result<()> {
     };
 
     let armored = export::encode_armor(&bundle).context("failed to encode the export bundle")?;
-    fs::write(&args.output, armored)
+    write_key_file(&args.output, &armored)
         .with_context(|| format!("failed to write {}", args.output.display()))?;
 
     let cur_dir = env::current_dir().unwrap_or_default();
@@ -57,6 +57,30 @@ pub fn run(args: &ExportArgs, store: &Store, io: &impl Io) -> Result<()> {
     io.print_line(&format!("  address: {}", bundle.address));
 
     Ok(())
+}
+
+/// Write `contents` to `path`, readable only by the current user.
+#[cfg(unix)]
+fn write_key_file(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    const OWNER_ONLY: u32 = 0o600;
+
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(OWNER_ONLY)
+        .open(path)?;
+    file.write_all(contents.as_bytes())?;
+    file.set_permissions(fs::Permissions::from_mode(OWNER_ONLY))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_key_file(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    fs::write(path, contents)
 }
 
 #[cfg(test)]
@@ -103,6 +127,30 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("Exported \"alice\""))
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn written_bundle_is_readable_only_by_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Arrange
+        let mut store = Store::new_in_memory();
+        seed(&mut store, "alice", "store-pass");
+
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("alice.chamberkey");
+        std::fs::write(&output, "stale").unwrap();
+        std::fs::set_permissions(&output, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let io = FakeIo::with_answers(["store-pass", "transfer-pass", "transfer-pass"]);
+
+        // Act
+        run(&args("alice", output.clone()), &store, &io).unwrap();
+
+        // Assert
+        let mode = std::fs::metadata(&output).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]

@@ -135,7 +135,7 @@ impl Store {
     }
 }
 
-fn decrypt_and_verify(record: &Record, passphrase: &str) -> Result<PrivKey> {
+pub(crate) fn decrypt_and_verify(record: &Record, passphrase: &str) -> Result<PrivKey> {
     // Decrypt
     let plain = Zeroizing::new(cipher::decrypt(&record.privkey_encrypted, passphrase)?);
     let bytes: [u8; 32] = plain
