@@ -96,6 +96,14 @@ impl Store {
     }
 }
 
+impl ExportBundle {
+    /// Check that `transfer_passphrase` decrypts this bundle.
+    pub fn verify_transfer_passphrase(&self, transfer_passphrase: &str) -> Result<()> {
+        cipher::decrypt(&self.privkey_encrypted, transfer_passphrase)?;
+        Ok(())
+    }
+}
+
 fn ensure_valid_export_format(format: &str) -> Result<()> {
     if format != EXPORT_FORMAT {
         return Err(Error::ExportFormat(format!(
@@ -264,6 +272,36 @@ mod tests {
         // Assert
         let plain = cipher::decrypt(&bundle.privkey_encrypted, "store-pass").unwrap();
         assert_eq!(plain.as_slice(), test_key().to_bytes().as_slice());
+    }
+
+    #[test]
+    fn verify_transfer_passphrase_accepts_the_correct_one() {
+        // Arrange
+        let store = seeded_store();
+        let bundle = store
+            .export_key("alice", "store-pass", "transfer-pass")
+            .unwrap();
+
+        // Act / Assert
+        assert!(bundle.verify_transfer_passphrase("transfer-pass").is_ok());
+    }
+
+    #[test]
+    fn verify_transfer_passphrase_rejects_a_wrong_one() {
+        // Arrange
+        let store = seeded_store();
+        let bundle = store
+            .export_key("alice", "store-pass", "transfer-pass")
+            .unwrap();
+
+        // Act
+        let err = bundle.verify_transfer_passphrase("wrong-pass").unwrap_err();
+
+        // Assert
+        assert_eq!(
+            err.to_string(),
+            "keystore decryption failed (wrong passphrase or corrupted data)"
+        );
     }
 
     #[test]

@@ -5,6 +5,8 @@ use directories::ProjectDirs;
 
 use crate::commands::add::AddArgs;
 use crate::commands::delete::DeleteArgs;
+use crate::commands::export::ExportArgs;
+use crate::commands::import::ImportArgs;
 
 /// A wallet for managing your Gno.land keys.
 #[derive(Debug, Parser)]
@@ -38,6 +40,12 @@ pub enum Command {
 
     /// Delete a key from the store
     Delete(DeleteArgs),
+
+    /// Export a key to a file
+    Export(ExportArgs),
+
+    /// Import a key previously exported with `chamber export`
+    Import(ImportArgs),
 
     /// Show the keys you have stored
     List,

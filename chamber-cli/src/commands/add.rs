@@ -46,7 +46,8 @@ pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
         (mnemonic, true)
     };
 
-    let passphrase = prompt_new_passphrase(io)?;
+    let passphrase =
+        crate::commands::prompt_passphrase(io, "Enter a passphrase to encrypt your key on disk: ")?;
     let path = Bip44Path::new(args.account, args.index);
 
     let record = match store.add(&args.name, &mnemonic, &passphrase, path) {
@@ -65,25 +66,6 @@ pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Ask for the passphrase to encrypt a key on disk.
-fn prompt_new_passphrase(io: &impl Io) -> Result<String> {
-    let first = io
-        .prompt_password("Enter a passphrase to encrypt your key on disk: ")
-        .context("failed to read the passphrase")?;
-    if first.is_empty() {
-        bail!("a passphrase is required to protect this key");
-    }
-
-    let second = io
-        .prompt_password("Repeat the passphrase: ")
-        .context("failed to read the passphrase")?;
-    if first != second {
-        bail!("passphrases don't match");
-    }
-
-    Ok(first)
 }
 
 /// Show the recovery phrase with a warning.

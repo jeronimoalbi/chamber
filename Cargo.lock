@@ -193,6 +193,7 @@ dependencies = [
  "clap",
  "directories",
  "rpassword",
+ "tempfile",
 ]
 
 [[package]]
