@@ -1,3 +1,4 @@
+use bech32::primitives::decode::CheckedHrpstring;
 use bech32::{Bech32, Hrp};
 
 use crate::error::{Error, Result};
@@ -26,7 +27,11 @@ impl Address {
 
     /// Parse a `g1...` address string.
     pub fn from_bech32(s: &str) -> Result<Self> {
-        let (hrp, data) = bech32::decode(s).map_err(|e| Error::Bech32(e.to_string()))?;
+        // Make sure bench32 is the only one valid, don't accept bech32m
+        let checked =
+            CheckedHrpstring::new::<Bech32>(s).map_err(|e| Error::Bech32(e.to_string()))?;
+
+        let hrp = checked.hrp();
         if hrp.as_str() != HRP {
             return Err(Error::Bech32(format!(
                 "expected prefix {HRP:?}, got {:?}",
@@ -34,6 +39,7 @@ impl Address {
             )));
         }
 
+        let data: Vec<u8> = checked.byte_iter().collect();
         let bytes: [u8; 20] = data
             .as_slice()
             .try_into()
@@ -185,14 +191,35 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "parsing failed")]
+    fn from_bech32_rejects_bech32m_checksum() {
+        //! Gno.land is BIP-173 bech32 only, a `g1…` string carrying the
+        //! bech32m checksum decodes to the same 20 bytes but is not an
+        //! address the chain accepts, so it must not be accepted.
+
+        // Arrange
+        let hrp = Hrp::parse(HRP).unwrap();
+        let bech32m = bech32::encode::<bech32::Bech32m>(hrp, &[0u8; 20]).unwrap();
+
+        // Act
+        let err = Address::from_bech32(&bech32m).unwrap_err();
+
+        // Assert
+        assert!(err.to_string().starts_with("invalid bech32:"));
+
+        // The same payload with the correct checksum is still accepted
+        let bech32 = bech32::encode::<Bech32>(hrp, &[0u8; 20]).unwrap();
+        assert_eq!(Address::from_bech32(&bech32).unwrap().to_bytes(), [0u8; 20]);
+    }
+
+    #[test]
+    #[should_panic(expected = "parse failed")]
     fn from_bech32_rejects_malformed_string() {
         // Act
         Address::from_bech32("").unwrap();
     }
 
     #[test]
-    #[should_panic(expected = "parsing failed")]
+    #[should_panic(expected = "parse failed")]
     fn from_bech32_rejects_mixed_case() {
         // Arrange
         let mid = KNOWN_ADDRESS.len() / 2;
