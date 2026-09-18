@@ -45,20 +45,24 @@ pub struct ExportBundle {
 impl Store {
     /// Export a key.
     /// Key is decrypted with the store's own passphrase and re-encrypted
-    /// under an optional transfer passphrase. The store passphrase is reused
-    /// when there is no transfer one.
+    /// under a nes passphrase.
+    ///
+    /// An export bundle is meant to leave the safety of the local store
+    /// (pasted into a chat, emailed, copied to another machine), which is an
+    /// exposed channel. Silently reusing the store passphrase there would
+    /// mean a leaked bundle compromises not just that one key, but the
+    /// same passphrase protecting everything else in the store.
     pub fn export_key(
         &self,
         name: &str,
         store_passphrase: &str,
-        transfer_passphrase: Option<&str>,
+        transfer_passphrase: &str,
     ) -> Result<ExportBundle> {
         let record = self.get_by_name(name)?;
         let plain = Zeroizing::new(cipher::decrypt(
             &record.privkey_encrypted,
             store_passphrase,
         )?);
-        let transfer_passphrase = transfer_passphrase.unwrap_or(store_passphrase);
         Ok(ExportBundle {
             format: EXPORT_FORMAT.to_string(),
             name: record.name,
@@ -70,19 +74,15 @@ impl Store {
     }
 
     /// Import a key into the store.
-    /// Key is decrypted with the optional transfer passphrase, or with the
-    /// store passphrase when the former is not specified. Store passphrase
-    /// is used to encript the key before saving it into the store.
     pub fn import_key(
         &mut self,
         name: &str,
         bundle: &ExportBundle,
-        transfer_passphrase: Option<&str>,
+        transfer_passphrase: &str,
         store_passphrase: &str,
     ) -> Result<Record> {
         ensure_valid_export_format(&bundle.format)?;
 
-        let transfer_passphrase = transfer_passphrase.unwrap_or(store_passphrase);
         let plain = Zeroizing::new(cipher::decrypt(
             &bundle.privkey_encrypted,
             transfer_passphrase,
@@ -203,7 +203,7 @@ mod tests {
 
         // Act
         let bundle = store
-            .export_key("alice", "store-pass", Some("transfer-pass"))
+            .export_key("alice", "store-pass", "transfer-pass")
             .unwrap();
 
         // Assert
@@ -223,7 +223,9 @@ mod tests {
         let store = seeded_store();
 
         // Act
-        let err = store.export_key("ghost", "store-pass", None).unwrap_err();
+        let err = store
+            .export_key("ghost", "store-pass", "transfer-pass")
+            .unwrap_err();
 
         // Assert
         assert_eq!(err.to_string(), "key not found: ghost");
@@ -235,7 +237,9 @@ mod tests {
         let store = seeded_store();
 
         // Act
-        let err = store.export_key("alice", "wrong-pass", None).unwrap_err();
+        let err = store
+            .export_key("alice", "wrong-pass", "transfer-pass")
+            .unwrap_err();
 
         // Assert
         assert_eq!(
@@ -245,12 +249,17 @@ mod tests {
     }
 
     #[test]
-    fn export_key_defaults_transfer_passphrase_to_store_passphrase() {
+    fn export_key_allows_explicitly_reusing_the_store_passphrase() {
+        //! Reuse is allowed when the caller explicitly chooses it — it's
+        //! only the silent default that was removed (M6).
+
         // Arrange
         let store = seeded_store();
 
         // Act
-        let bundle = store.export_key("alice", "store-pass", None).unwrap();
+        let bundle = store
+            .export_key("alice", "store-pass", "store-pass")
+            .unwrap();
 
         // Assert
         let plain = cipher::decrypt(&bundle.privkey_encrypted, "store-pass").unwrap();
@@ -266,13 +275,13 @@ mod tests {
         // Arrange
         let src = seeded_store();
         let bundle = src
-            .export_key("alice", "store-pass", Some("transfer-pass"))
+            .export_key("alice", "store-pass", "transfer-pass")
             .unwrap();
         let mut dst = Store::new_in_memory();
 
         // Act
         let record = dst
-            .import_key("copy", &bundle, Some("transfer-pass"), "dst-pass")
+            .import_key("copy", &bundle, "transfer-pass", "dst-pass")
             .unwrap();
 
         // Assert
@@ -290,13 +299,13 @@ mod tests {
         // Arrange
         let src = seeded_store();
         let bundle = src
-            .export_key("alice", "store-pass", Some("transfer-pass"))
+            .export_key("alice", "store-pass", "transfer-pass")
             .unwrap();
         let mut dst = Store::new_in_memory();
 
         // Act
         let err = dst
-            .import_key("copy", &bundle, Some("wrong-pass"), "dst-pass")
+            .import_key("copy", &bundle, "wrong-pass", "dst-pass")
             .unwrap_err();
 
         // Assert
@@ -307,21 +316,19 @@ mod tests {
     }
 
     #[test]
-    fn import_key_defaults_transfer_passphrase_to_store_passphrase() {
-        //! A bundle exported with no transfer passphrase is encrypted under
-        //! the source store's own passphrase, so the recipient must have
-        //! been told that passphrase. Importing it by also omitting the
-        //! transfer passphrase decrypts the bundle with the destination
-        //! store's passphrase, which must therefore be that same shared
-        //! value.
+    fn import_key_allows_explicitly_reusing_the_store_passphrase() {
+        //! Reuse is allowed on the import side too, when the caller
+        //! explicitly chooses it on both ends of the transfer.
 
         // Arrange
         let src = seeded_store();
-        let bundle = src.export_key("alice", "store-pass", None).unwrap();
+        let bundle = src.export_key("alice", "store-pass", "store-pass").unwrap();
         let mut dst = Store::new_in_memory();
 
         // Act
-        let record = dst.import_key("copy", &bundle, None, "store-pass").unwrap();
+        let record = dst
+            .import_key("copy", &bundle, "store-pass", "store-pass")
+            .unwrap();
 
         // Assert
         assert_eq!(record.address, bundle.address);
@@ -338,14 +345,14 @@ mod tests {
         // Arrange
         let src = seeded_store();
         let mut bundle = src
-            .export_key("alice", "store-pass", Some("transfer-pass"))
+            .export_key("alice", "store-pass", "transfer-pass")
             .unwrap();
         bundle.format = "gnokey-armor-v1".to_string();
         let mut dst = Store::new_in_memory();
 
         // Act
         let err = dst
-            .import_key("copy", &bundle, Some("transfer-pass"), "dst-pass")
+            .import_key("copy", &bundle, "transfer-pass", "dst-pass")
             .unwrap_err();
 
         // Assert
@@ -360,11 +367,13 @@ mod tests {
     fn import_key_rejects_duplicate_name() {
         // Arrange
         let mut store = seeded_store();
-        let bundle = store.export_key("alice", "store-pass", None).unwrap();
+        let bundle = store
+            .export_key("alice", "store-pass", "transfer-pass")
+            .unwrap();
 
         // Act
         let err = store
-            .import_key("alice", &bundle, None, "store-pass")
+            .import_key("alice", &bundle, "transfer-pass", "store-pass")
             .unwrap_err();
 
         // Assert
@@ -390,7 +399,7 @@ mod tests {
 
         // Act
         let err = store
-            .import_key("copy", &bundle, Some("transfer-pass"), "dst-pass")
+            .import_key("copy", &bundle, "transfer-pass", "dst-pass")
             .unwrap_err();
 
         // Assert
@@ -407,7 +416,9 @@ mod tests {
 
         // Arrange
         let store = seeded_store();
-        let bundle = store.export_key("alice", "store-pass", None).unwrap();
+        let bundle = store
+            .export_key("alice", "store-pass", "transfer-pass")
+            .unwrap();
 
         // Act
         let armored = encode_armor(&bundle).unwrap();
@@ -500,7 +511,9 @@ mod tests {
     fn decode_armor_tolerates_surrounding_whitespace() {
         // Arrange
         let store = seeded_store();
-        let bundle = store.export_key("alice", "store-pass", None).unwrap();
+        let bundle = store
+            .export_key("alice", "store-pass", "transfer-pass")
+            .unwrap();
         let armored = encode_armor(&bundle).unwrap();
         let padded = format!("\n\n  {armored}\n\n\t\n");
 
