@@ -1,5 +1,6 @@
 use bech32::primitives::decode::CheckedHrpstring;
 use bech32::{Bech32, Hrp};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, Result};
 
@@ -17,6 +18,11 @@ impl Address {
 
     pub fn to_bytes(&self) -> [u8; 20] {
         self.0
+    }
+
+    /// Whether this is the all-zero address, which Gno.land treats as "unset".
+    pub fn is_zero(&self) -> bool {
+        self.0 == [0u8; 20]
     }
 
     /// Encode address as `g1...` string.
@@ -48,6 +54,13 @@ impl Address {
     }
 }
 
+/// The zero address, which Gno.land treats as "unset" (see [`Address::is_zero`]).
+impl Default for Address {
+    fn default() -> Self {
+        Self([0u8; 20])
+    }
+}
+
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_bech32())
@@ -65,6 +78,20 @@ impl std::str::FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self> {
         Self::from_bech32(s)
+    }
+}
+
+/// Addresses are their bech32 string in JSON, which is also their Amino form.
+impl Serialize for Address {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Self::from_bech32(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -258,5 +285,49 @@ mod tests {
 
         // Assert
         assert_eq!(copied, address);
+    }
+}
+
+#[cfg(test)]
+mod serde_tests {
+    use super::*;
+
+    const KNOWN_ADDRESS: &str = "g1r5v5srda7xfth3hn2s26txvrcrntldjughmckm";
+
+    #[test]
+    fn serializes_as_bech32_string() {
+        // Arrange
+        let address = Address::from_bech32(KNOWN_ADDRESS).unwrap();
+
+        // Act
+        let json = serde_json::to_string(&address).unwrap();
+
+        // Assert
+        assert_eq!(json, format!("\"{KNOWN_ADDRESS}\""));
+    }
+
+    #[test]
+    fn deserializes_from_bech32_string() {
+        // Act
+        let address: Address = serde_json::from_str(&format!("\"{KNOWN_ADDRESS}\"")).unwrap();
+
+        // Assert
+        assert_eq!(address.to_bech32(), KNOWN_ADDRESS);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid bech32")]
+    fn deserialize_rejects_wrong_prefix() {
+        //! A "gpub…" string is not an address (here it is not even valid bech32)
+
+        // Act
+        let _: Address = serde_json::from_str("\"gpub1abc\"").unwrap();
+    }
+
+    #[test]
+    fn is_zero_only_for_all_zero_bytes() {
+        // Assert
+        assert!(Address::from_bytes([0u8; 20]).is_zero());
+        assert!(!Address::from_bech32(KNOWN_ADDRESS).unwrap().is_zero());
     }
 }
