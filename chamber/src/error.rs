@@ -60,6 +60,10 @@ pub enum Error {
     #[error("not implemented: {0}")]
     Unimplemented(String),
 
+    /// Amino-encoded data was malformed or of an unsupported type.
+    #[error("amino error: {0}")]
+    Amino(String),
+
     /// Underlying filesystem error.
     #[error("io error: {0}")]
     Io(#[from] io::Error),

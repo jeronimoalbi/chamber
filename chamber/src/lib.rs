@@ -24,6 +24,7 @@
 mod cipher;
 
 pub mod address;
+pub mod amino;
 pub mod backend;
 pub mod error;
 pub mod export;
