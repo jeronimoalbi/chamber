@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chamber::Store;
+use chamber::{AnyPubKey, Store};
 
 use crate::io::Io;
 
@@ -14,10 +14,15 @@ pub fn run(store: &Store, io: &impl Io) -> Result<()> {
     for entry in &entries {
         io.print_line(&format!("\"{}\"", entry.name));
         io.print_line(&format!("  address: {}", entry.address));
-        io.print_line(&format!("  pubkey:  {} (base64)", entry.pubkey_b64));
-        match entry.path {
-            Some(path) => io.print_line(&format!("  path:    {path}")),
-            None => io.print_line("  path:    n/a (imported from a raw key)"),
+        io.print_line(&format!("  pubkey:  {}", entry.pub_key));
+        match (&entry.pub_key, entry.path) {
+            (AnyPubKey::Multisig(key), _) => io.print_line(&format!(
+                "  type:    multisig ({} of {} members must sign)",
+                key.threshold,
+                key.pubkeys.len()
+            )),
+            (_, Some(path)) => io.print_line(&format!("  path:    {path}")),
+            (_, None) => io.print_line("  path:    n/a (imported from a raw key)"),
         }
     }
 
@@ -66,7 +71,7 @@ mod tests {
         // Assert
         let printed = io.printed.borrow().join("\n");
         assert!(printed.contains(&record.address));
-        assert!(printed.contains(&record.pubkey_b64));
+        assert!(printed.contains(&record.pub_key.to_bech32()));
         assert!(printed.contains("44'/118'/0'/0/0"));
     }
 
@@ -109,5 +114,37 @@ mod tests {
         let printed = io.printed.borrow().join("\n");
         assert!(printed.contains("bob"));
         assert!(printed.contains("alice"));
+    }
+}
+
+#[cfg(test)]
+mod multisig_tests {
+    use chamber::hdpath::Bip44Path;
+    use chamber::{Mnemonic, Store};
+
+    use super::*;
+    use crate::io::testing::FakeIo;
+
+    #[test]
+    fn shows_the_threshold_for_a_multisig_key() {
+        // Arrange
+        let mut store = Store::new_in_memory();
+        let mnemonic = Mnemonic::generate().unwrap();
+        store
+            .add("a", &mnemonic, "pass", Bip44Path::new(0, 0))
+            .unwrap();
+        store
+            .add("b", &mnemonic, "pass", Bip44Path::new(0, 1))
+            .unwrap();
+        let record = store.add_multisig("team", 2, &["a", "b"], true).unwrap();
+        let io = FakeIo::default();
+
+        // Act
+        run(&store, &io).unwrap();
+
+        // Assert
+        let printed = io.printed.borrow().join("\n");
+        assert!(printed.contains(&record.address));
+        assert!(printed.contains("type:    multisig (2 of 2 members must sign)"));
     }
 }

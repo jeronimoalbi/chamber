@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::cipher::EncryptedBlob;
 use crate::error::Result;
 use crate::hdpath::Bip44Path;
+use crate::tx::AnyPubKey;
 
 /// Record contains data of a single key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,16 +24,23 @@ pub struct Record {
     /// Bech32 address.
     pub address: String,
 
-    /// Compressed public key as base64.
-    pub pubkey_b64: String,
+    /// The public key: a secp256k1 key, or a multisig key over other keys.
+    pub pub_key: AnyPubKey,
 
     /// Derivation path used, when this key was added from a mnemonic,
     /// or `None` when key was added from raw bytes.
     pub path: Option<Bip44Path>,
 
-    /// Encrypted (Argon2id + XChaCha20-Poly1305) private key.
-    /// Encrypts the raw 32-byte private key.
-    pub privkey_encrypted: EncryptedBlob,
+    /// Encrypted (Argon2id + XChaCha20-Poly1305) raw 32-byte private key.
+    /// `None` for a multisig key, which has no private key of its own.
+    pub privkey_encrypted: Option<EncryptedBlob>,
+}
+
+impl Record {
+    /// Whether this key can sign by itself (i.e. it is not a multisig key).
+    pub fn has_private_key(&self) -> bool {
+        self.privkey_encrypted.is_some()
+    }
 }
 
 /// Persists [`Record`]s for a [`crate::store::Store`].
@@ -58,9 +66,6 @@ pub trait Backend: Send {
 pub(crate) mod test_support {
     use super::*;
 
-    use base64::Engine;
-    use base64::engine::general_purpose::STANDARD as B64;
-
     use crate::cipher;
     use crate::key::PrivKey;
 
@@ -72,9 +77,9 @@ pub(crate) mod test_support {
         Record {
             name: name.to_string(),
             address: key.pub_key().address().to_bech32(),
-            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            pub_key: key.pub_key().into(),
             path: None,
-            privkey_encrypted: blob,
+            privkey_encrypted: Some(blob),
         }
     }
 }

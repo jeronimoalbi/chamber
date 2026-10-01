@@ -44,6 +44,11 @@ pub enum Error {
     #[error("key export format error: {0}")]
     ExportFormat(String),
 
+    /// The key is stored without a private key (a multisig key), so it
+    /// can't be unlocked, rotated or exported; sign with its members instead.
+    #[error("key {0} has no private key stored (a multisig key can't sign by itself)")]
+    NoPrivateKey(String),
+
     /// A key with the same name or address was not found in the store.
     #[error("key not found: {0}")]
     NotFound(String),

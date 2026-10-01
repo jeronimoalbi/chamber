@@ -220,7 +220,10 @@ mod tests {
         assert_eq!(bundle.format, EXPORT_FORMAT);
         assert_eq!(bundle.name, record.name);
         assert_eq!(bundle.address, record.address);
-        assert_eq!(bundle.pubkey_b64, record.pubkey_b64);
+        let crate::tx::AnyPubKey::Secp256k1(pub_key) = &record.pub_key else {
+            panic!("expected a secp256k1 key")
+        };
+        assert_eq!(bundle.pubkey_b64, B64.encode(pub_key.to_bytes()));
         assert!(bundle.path.is_none());
 
         let plain = cipher::decrypt(&bundle.privkey_encrypted, "transfer-pass").unwrap();

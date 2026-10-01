@@ -1,8 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as B64;
 use zeroize::Zeroizing;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -14,6 +12,7 @@ use crate::error::{Error, Result};
 use crate::hdpath::Bip44Path;
 use crate::key::PrivKey;
 use crate::mnemonic::Mnemonic;
+use crate::tx::{AnyPubKey, MultisigPubKey};
 
 /// Maximum length allowed for a key name.
 const MAX_KEY_NAME_LEN: usize = 64;
@@ -54,9 +53,9 @@ impl Store {
         let record = Record {
             name: name.to_string(),
             address: key.pub_key().address().to_bech32(),
-            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            pub_key: key.pub_key().into(),
             path: Some(path),
-            privkey_encrypted: blob,
+            privkey_encrypted: Some(blob),
         };
         self.backend.insert(record.clone())?;
         Ok(record)
@@ -71,9 +70,39 @@ impl Store {
         let record = Record {
             name: name.to_string(),
             address: key.pub_key().address().to_bech32(),
-            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            pub_key: key.pub_key().into(),
             path: None,
-            privkey_encrypted: blob,
+            privkey_encrypted: Some(blob),
+        };
+        self.backend.insert(record.clone())?;
+        Ok(record)
+    }
+
+    /// Add a k-of-n multisig key over keys already in the store, like
+    /// `gnokey add --multisig`. With `sort`, members are ordered by address
+    /// (gnokey's default); every party must build the key the same way to
+    /// get the same address. Only public keys are stored, so the result
+    /// can't sign by itself: members sign and `Tx::multisign` combines.
+    pub fn add_multisig(
+        &mut self,
+        name: &str,
+        threshold: u64,
+        member_names: &[&str],
+        sort: bool,
+    ) -> Result<Record> {
+        ensure_valid_key_name(name)?;
+
+        let members = member_names
+            .iter()
+            .map(|member| self.get_by_name(member).map(|r| r.pub_key))
+            .collect::<Result<Vec<_>>>()?;
+        let pub_key = AnyPubKey::Multisig(MultisigPubKey::new(threshold, members, sort)?);
+        let record = Record {
+            name: name.to_string(),
+            address: pub_key.address().to_bech32(),
+            pub_key,
+            path: None,
+            privkey_encrypted: None,
         };
         self.backend.insert(record.clone())?;
         Ok(record)
@@ -116,7 +145,8 @@ impl Store {
 
         let mut record = self.get_by_name(name)?;
         let key = decrypt_and_verify(&record, old_passphrase)?;
-        record.privkey_encrypted = cipher::encrypt(key.to_bytes().as_slice(), new_passphrase)?;
+        record.privkey_encrypted =
+            Some(cipher::encrypt(key.to_bytes().as_slice(), new_passphrase)?);
         self.backend.update(record)
     }
 
@@ -136,8 +166,13 @@ impl Store {
 }
 
 pub(crate) fn decrypt_and_verify(record: &Record, passphrase: &str) -> Result<PrivKey> {
+    let blob = record
+        .privkey_encrypted
+        .as_ref()
+        .ok_or_else(|| Error::NoPrivateKey(record.name.clone()))?;
+
     // Decrypt
-    let plain = Zeroizing::new(cipher::decrypt(&record.privkey_encrypted, passphrase)?);
+    let plain = Zeroizing::new(cipher::decrypt(blob, passphrase)?);
     let bytes: [u8; 32] = plain
         .as_slice()
         .try_into()
@@ -146,12 +181,11 @@ pub(crate) fn decrypt_and_verify(record: &Record, passphrase: &str) -> Result<Pr
 
     // Verify that public key and address are right
     let pub_key = key.pub_key();
-    let pubkey_b64 = B64.encode(pub_key.to_bytes());
     let address = pub_key.address().to_bech32();
-    if pubkey_b64 != record.pubkey_b64 || address != record.address {
+    if record.pub_key != pub_key || address != record.address {
         return Err(Error::Tampered(format!(
             "record {:?} claims pubkey {} / address {}, but the decrypted key is {} / {}",
-            record.name, record.pubkey_b64, record.address, pubkey_b64, address
+            record.name, record.pub_key, record.address, pub_key, address
         )));
     }
 
@@ -202,7 +236,78 @@ mod tests {
         assert_eq!(record.name, "alice");
         assert_eq!(record.path, Some(path));
         assert!(record.address.starts_with("g1"));
-        assert_eq!(B64.decode(&record.pubkey_b64).unwrap().len(), 33);
+        assert!(matches!(record.pub_key, AnyPubKey::Secp256k1(_)));
+        assert!(record.has_private_key());
+    }
+
+    #[test]
+    fn add_multisig_builds_a_sorted_key_over_stored_members() {
+        // Arrange
+        let mut store = Store::new_in_memory();
+        let m = test_mnemonic();
+        let a = store.add("a", &m, "pass", Bip44Path::new(0, 0)).unwrap();
+        let b = store.add("b", &m, "pass", Bip44Path::new(0, 1)).unwrap();
+        let c = store.add("c", &m, "pass", Bip44Path::new(1, 0)).unwrap();
+
+        // Act
+        let record = store
+            .add_multisig("team", 2, &["c", "a", "b"], true)
+            .unwrap();
+
+        // Assert
+        let AnyPubKey::Multisig(key) = &record.pub_key else {
+            panic!("expected a multisig key")
+        };
+        let mut expected = vec![a.pub_key, b.pub_key, c.pub_key];
+        expected.sort_by_key(|k| k.address().to_bytes());
+        assert_eq!(key.threshold, 2);
+        assert_eq!(key.pubkeys, expected);
+        assert_eq!(record.address, record.pub_key.address().to_bech32());
+        assert!(!record.has_private_key());
+        assert_eq!(store.get_by_name("team").unwrap().address, record.address);
+        assert_eq!(store.list().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn add_multisig_rejects_unknown_members_and_bad_thresholds() {
+        // Arrange
+        let mut store = Store::new_in_memory();
+        store
+            .add("a", &test_mnemonic(), "pass", Bip44Path::default())
+            .unwrap();
+
+        // Assert
+        let err = store
+            .add_multisig("team", 1, &["a", "ghost"], true)
+            .unwrap_err();
+        assert_eq!(err.to_string(), "key not found: ghost");
+        let err = store.add_multisig("team", 2, &["a"], true).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid key: threshold k of n multisignature: 1 < 2"
+        );
+        assert!(store.get_by_name("team").is_err());
+    }
+
+    #[test]
+    fn multisig_keys_cannot_be_unlocked_or_rotated() {
+        // Arrange
+        let mut store = Store::new_in_memory();
+        store
+            .add("a", &test_mnemonic(), "pass", Bip44Path::default())
+            .unwrap();
+        store.add_multisig("team", 1, &["a"], true).unwrap();
+
+        // Assert
+        let expected = "key team has no private key stored (a multisig key can't sign by itself)";
+        assert_eq!(
+            store.unlock("team", "pass").unwrap_err().to_string(),
+            expected
+        );
+        assert_eq!(
+            store.rotate("team", "pass", "new").unwrap_err().to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -414,9 +519,9 @@ mod tests {
         let tampered = Record {
             name: "main".to_string(),
             address: "g1attackercontrolledaddress00000000000".to_string(),
-            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            pub_key: key.pub_key().into(),
             path: None,
-            privkey_encrypted: blob,
+            privkey_encrypted: Some(blob),
         };
         let mut backend = MemoryBackend::new();
         backend.insert(tampered).unwrap();
@@ -441,9 +546,9 @@ mod tests {
         let tampered = Record {
             name: "main".to_string(),
             address: key.pub_key().address().to_bech32(),
-            pubkey_b64: B64.encode(other_pubkey.to_bytes()),
+            pub_key: other_pubkey.into(),
             path: None,
-            privkey_encrypted: blob,
+            privkey_encrypted: Some(blob),
         };
         let mut backend = MemoryBackend::new();
         backend.insert(tampered).unwrap();
@@ -467,9 +572,9 @@ mod tests {
         let tampered = Record {
             name: "main".to_string(),
             address: "g1attackercontrolledaddress00000000000".to_string(),
-            pubkey_b64: B64.encode(key.pub_key().to_bytes()),
+            pub_key: key.pub_key().into(),
             path: None,
-            privkey_encrypted: blob,
+            privkey_encrypted: Some(blob),
         };
         let mut backend = MemoryBackend::new();
         backend.insert(tampered).unwrap();
