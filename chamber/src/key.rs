@@ -10,6 +10,11 @@ use crate::address::Address;
 use crate::error::{Error, Result};
 use crate::hdpath::{self, Bip44Path};
 use crate::mnemonic::Mnemonic;
+use crate::tx::SignDoc;
+use crate::tx::pubkey::AnyPubKey;
+
+/// The human-readable part of a Gno.land public key string before the "1" separator.
+pub const PUBKEY_HRP: &str = "gpub";
 
 /// A secp256k1 private key (32 bytes).
 #[derive(Clone)]
@@ -55,32 +60,21 @@ impl PrivKey {
     /// Sign an arbitrary message.
     /// Returns a 64-byte `R || S` signature in low-S form.
     pub fn sign_arbitrary(&self, msg: &[u8]) -> [u8; 64] {
-        // Hash to match gno's secp256k1 signer
+        // Hash with SHA-256 first, as Gno.land signers do
         let digest = Sha256::digest(msg);
         self.sign_prehashed(&digest.into())
     }
 
-    /// Sign a Gno.land transaction `SignDoc`.
+    /// Sign a Gno.land transaction [`SignDoc`].
+    /// For the legacy one use `Tx::sign` with [`SignOpts::legacy`],
+    /// or `sign_arbitrary` over [`SignDoc::sign_bytes_legacy`].
     ///
-    /// **Not implemented yet.**
-    pub fn sign_tx(&self) -> Result<[u8; 64]> {
-        // This crate doesn't support Amino encoding yet, and building a `SignDoc`'s
-        // canonical sign bytes requires it.
-        //
-        // TODO: take a `SignDoc` (or its canonical Amino-JSON sign bytes) once Amino
-        // is supported, and sign it via the crate-private `sign_prehashed`.
-        Err(Error::Unimplemented(
-            "transaction signing requires Amino support, not implemented yet".into(),
-        ))
+    /// [`SignOpts::legacy`]: crate::tx::SignOpts::legacy
+    pub fn sign_tx(&self, doc: &SignDoc) -> Result<[u8; 64]> {
+        Ok(self.sign_arbitrary(&doc.sign_bytes()?))
     }
 
     /// Sign a pre-computed 32-byte digest, with no further hashing.
-    ///
-    /// Crate-private: this signs whatever 32 bytes it's given, with no framing or
-    /// context, so it must never be reachable from outside `chamber` — an external
-    /// caller with direct access to it could sign a real transaction's sign-bytes just
-    /// as easily as anything else. Used by [`sign_arbitrary`](Self::sign_arbitrary) and,
-    /// once implemented, by [`sign_tx`](Self::sign_tx).
     pub(crate) fn sign_prehashed(&self, digest32: &[u8; 32]) -> [u8; 64] {
         // A 32-byte prehash is always signable
         let priv_key = SigningKey::from_slice(&self.0).unwrap();
@@ -127,6 +121,30 @@ impl PubKey {
         self.0.iter().map(|b| format!("{b:02x}")).collect()
     }
 
+    /// The `gpub1…` string for a public key: bech32 over the Amino
+    /// `Any` encoding of the key ([`to_amino_any`](Self::to_amino_any)),
+    /// not over the raw 33 bytes.
+    pub fn to_bech32(&self) -> String {
+        AnyPubKey::Secp256k1(*self).to_bech32()
+    }
+
+    /// Parse a `gpub1…` string holding a secp256k1 key. Use
+    /// [`AnyPubKey::from_bech32`] to accept multisig keys as well.
+    pub fn from_bech32(s: &str) -> Result<Self> {
+        match AnyPubKey::from_bech32(s)? {
+            AnyPubKey::Secp256k1(key) => Ok(key),
+            other => Err(Error::Amino(format!(
+                "expected a secp256k1 public key, got {}",
+                other.type_url()
+            ))),
+        }
+    }
+
+    /// The Amino-binary `Any` encoding of the key (`amino.MarshalAny`).
+    pub fn to_amino_any(&self) -> Vec<u8> {
+        AnyPubKey::Secp256k1(*self).to_amino_any()
+    }
+
     /// The Gno.land address.
     pub fn address(&self) -> Address {
         let hash = Sha256::digest(self.0);
@@ -156,6 +174,13 @@ impl PubKey {
         // Check that the signature for the current message is authentic
         let digest = Sha256::digest(msg);
         key.verify_prehash(&digest, &signature).is_ok()
+    }
+}
+
+/// A public key displays as its `gpub1…` string, like Gno.land does.
+impl std::fmt::Display for PubKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_bech32())
     }
 }
 
@@ -396,18 +421,48 @@ mod tests {
     }
 
     #[test]
-    fn sign_tx_is_not_implemented_yet() {
-        //! `sign_tx` is a placeholder until Amino support lands (see `PLAN.md`, Phase B).
-        //! It must fail loudly with a `Result`, not silently misbehave or panic.
+    fn sign_tx_signs_the_canonical_sign_bytes() {
+        //! `sign_tx` is `sign_arbitrary` over `SignDoc::sign_bytes`
+
+        // Arrange
+        let key = known_priv_key();
+        let doc = SignDoc {
+            chain_id: "dev".into(),
+            account_number: 8,
+            sequence: 3,
+            fee: crate::tx::Fee::default(),
+            msgs: vec![],
+            memo: String::new(),
+        };
+        let sign_bytes = doc.sign_bytes().unwrap();
 
         // Act
-        let err = known_priv_key().sign_tx().unwrap_err();
+        let via_tx = key.sign_tx(&doc).unwrap();
 
         // Assert
-        assert_eq!(
-            err.to_string(),
-            "not implemented: transaction signing requires Amino support, not implemented yet"
-        );
+        assert_eq!(via_tx, key.sign_arbitrary(&sign_bytes));
+        assert!(key.pub_key().verify(&sign_bytes, &via_tx));
+    }
+
+    #[test]
+    fn pub_key_bech32_round_trips_with_gpub_prefix() {
+        // Arrange
+        let key = known_priv_key().pub_key();
+
+        // Act
+        let encoded = key.to_bech32();
+        let decoded = PubKey::from_bech32(&encoded).unwrap();
+
+        // Assert
+        assert!(encoded.starts_with("gpub1"));
+        assert_eq!(decoded, key);
+        assert_eq!(key.to_string(), encoded);
+    }
+
+    #[test]
+    #[should_panic(expected = "expected prefix")]
+    fn pub_key_from_bech32_rejects_address_strings() {
+        PubKey::from_bech32(KNOWN_ADDRESS).unwrap();
     }
 
     #[test]

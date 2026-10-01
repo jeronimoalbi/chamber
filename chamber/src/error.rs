@@ -56,9 +56,19 @@ pub enum Error {
     #[error("invalid key name: {0}")]
     InvalidName(String),
 
-    /// Functionality that is planned but not implemented yet.
-    #[error("not implemented: {0}")]
-    Unimplemented(String),
+    /// A coin or coins string was malformed or invalid (bad denom, negative
+    /// or zero amount, unsorted or duplicate denoms).
+    #[error("invalid coin: {0}")]
+    Coin(String),
+
+    /// A Gno package could not be built from files (bad path, inconsistent
+    /// or missing package clause, no files).
+    #[error("invalid package: {0}")]
+    Package(String),
+
+    /// A transaction or message failed basic validation.
+    #[error("invalid transaction: {0}")]
+    Tx(String),
 
     /// Amino-encoded data was malformed or of an unsupported type.
     #[error("amino error: {0}")]
