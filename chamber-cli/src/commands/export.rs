@@ -20,8 +20,15 @@ pub struct ExportArgs {
 }
 
 pub fn run(args: &ExportArgs, store: &Store, io: &impl Io) -> Result<()> {
-    if store.get_by_name(&args.name).is_err() {
+    let Ok(record) = store.get_by_name(&args.name) else {
         bail!("no key named \"{}\"", args.name);
+    };
+
+    if !record.has_private_key() {
+        bail!(
+            "\"{}\" is a multisig key; it has no private key to export",
+            args.name
+        );
     }
 
     let store_passphrase = io

@@ -26,6 +26,19 @@ pub struct AddArgs {
     /// than one key under the same recovery phrase
     #[arg(long, default_value_t = 0)]
     pub index: u32,
+
+    /// Build a multisig key from keys already in the store; repeat for each
+    /// member. Needs --threshold
+    #[arg(long, value_name = "NAME", conflicts_with_all = ["recover", "account", "index"])]
+    pub multisig: Vec<String>,
+
+    /// How many members must sign a transaction from the multisig key
+    #[arg(long, value_name = "K", requires = "multisig")]
+    pub threshold: Option<u64>,
+
+    /// Keep the members in the order given instead of sorting them by address
+    #[arg(long, requires = "multisig")]
+    pub nosort: bool,
 }
 
 pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
@@ -34,6 +47,10 @@ pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
             "key with name \"{}\" already exist, pick a different name",
             args.name
         );
+    }
+
+    if !args.multisig.is_empty() {
+        return add_multisig(args, store, io);
     }
 
     let (mnemonic, is_memonic_generated) = if args.recover {
@@ -72,6 +89,32 @@ pub fn run(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
     Ok(())
 }
 
+/// Store a k-of-n key over existing keys.
+fn add_multisig(args: &AddArgs, store: &mut Store, io: &impl Io) -> Result<()> {
+    let Some(threshold) = args.threshold else {
+        bail!("--threshold is required with --multisig");
+    };
+    let members: Vec<&str> = args.multisig.iter().map(String::as_str).collect();
+    let record = match store.add_multisig(&args.name, threshold, &members, !args.nosort) {
+        Ok(record) => record,
+        Err(ChamberError::NotFound(name)) => bail!("no key named \"{name}\" to use as a member"),
+        Err(ChamberError::Key(reason)) => bail!("invalid multisig: {reason}"),
+        Err(err) => return Err(err.into()),
+    };
+
+    io.print_line(&format!("Added multisig \"{}\"", record.name));
+    io.print_line(&format!("  address: {}", record.address));
+    io.print_line(&format!("  pubkey:  {}", record.pub_key));
+    io.print_line(&format!(
+        "  {} of {} members must sign; members sign with `chamber sign <member> --output-document` \
+         and `chamber multisign {}` combines the signatures",
+        threshold,
+        members.len(),
+        record.name
+    ));
+    Ok(())
+}
+
 /// Show the recovery phrase with a warning.
 fn print_mnemonic_warning(io: &impl Io, mnemonic: &Mnemonic) {
     io.print_line("");
@@ -98,6 +141,9 @@ mod tests {
             recover: false,
             account: 0,
             index: 0,
+            multisig: vec![],
+            threshold: None,
+            nosort: false,
         }
     }
 
@@ -234,5 +280,87 @@ mod tests {
             store_a.get_by_name("bob").unwrap().address,
             store_b.get_by_name("bob").unwrap().address,
         );
+    }
+}
+
+#[cfg(test)]
+mod multisig_tests {
+    use chamber::AnyPubKey;
+
+    use super::*;
+    use crate::io::testing::FakeIo;
+
+    fn multisig_args(name: &str, members: &[&str], threshold: Option<u64>) -> AddArgs {
+        AddArgs {
+            name: name.to_string(),
+            recover: false,
+            account: 0,
+            index: 0,
+            multisig: members.iter().map(|m| m.to_string()).collect(),
+            threshold,
+            nosort: false,
+        }
+    }
+
+    fn store_with_members() -> Store {
+        let mut store = Store::new_in_memory();
+        let mnemonic = Mnemonic::generate().unwrap();
+        store
+            .add("a", &mnemonic, "pass", Bip44Path::new(0, 0))
+            .unwrap();
+        store
+            .add("b", &mnemonic, "pass", Bip44Path::new(0, 1))
+            .unwrap();
+        store
+    }
+
+    #[test]
+    fn builds_a_multisig_key_without_asking_for_a_passphrase() {
+        // Arrange
+        let mut store = store_with_members();
+        let io = FakeIo::default();
+
+        // Act
+        run(
+            &multisig_args("team", &["a", "b"], Some(2)),
+            &mut store,
+            &io,
+        )
+        .unwrap();
+
+        // Assert
+        let record = store.get_by_name("team").unwrap();
+        assert!(matches!(record.pub_key, AnyPubKey::Multisig(_)));
+        assert!(io.prompted.borrow().is_empty());
+
+        let printed = io.printed.borrow().join("\n");
+        assert!(printed.contains(&record.address));
+        assert!(printed.contains("2 of 2 members must sign"));
+    }
+
+    #[test]
+    fn requires_a_threshold_and_known_members() {
+        // Arrange
+        let mut store = store_with_members();
+        let io = FakeIo::default();
+
+        // Assert
+        let err = run(&multisig_args("team", &["a", "b"], None), &mut store, &io).unwrap_err();
+        assert_eq!(err.to_string(), "--threshold is required with --multisig");
+
+        let err = run(
+            &multisig_args("team", &["a", "ghost"], Some(1)),
+            &mut store,
+            &io,
+        )
+        .unwrap_err();
+        assert_eq!(err.to_string(), "no key named \"ghost\" to use as a member");
+
+        let err = run(&multisig_args("team", &["a"], Some(2)), &mut store, &io).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid multisig: threshold k of n multisignature: 1 < 2"
+        );
+        assert!(store.get_by_name("team").is_err());
     }
 }

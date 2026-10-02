@@ -35,5 +35,6 @@ fn run(cli: Cli) -> Result<()> {
         Command::List => commands::list::run(&store, &io),
         Command::Sign(args) => commands::sign::run(&args, &store, &io),
         Command::MakeTx(args) => commands::maketx::run(&args, &store, &io),
+        Command::Multisign(args) => commands::multisign::run(&args, &store, &io),
     }
 }

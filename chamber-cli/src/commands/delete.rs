@@ -12,8 +12,15 @@ pub struct DeleteArgs {
 }
 
 pub fn run(args: &DeleteArgs, store: &mut Store, io: &impl Io) -> Result<()> {
-    if store.get_by_name(&args.name).is_err() {
+    let Ok(record) = store.get_by_name(&args.name) else {
         bail!("no key named \"{}\"", args.name);
+    };
+
+    // A multisig key holds no secret, so there is no passphrase to check
+    if !record.has_private_key() {
+        store.delete(&args.name)?;
+        io.print_line(&format!("Deleted multisig \"{}\"", args.name));
+        return Ok(());
     }
 
     let passphrase = io
@@ -151,5 +158,46 @@ mod tests {
         // Assert
         assert!(err.to_string().contains("wrong passphrase"));
         assert!(store.get_by_name("alice").is_ok());
+    }
+}
+
+#[cfg(test)]
+mod multisig_tests {
+    use chamber::Mnemonic;
+    use chamber::hdpath::Bip44Path;
+
+    use super::*;
+    use crate::io::testing::FakeIo;
+
+    #[test]
+    fn deletes_a_multisig_key_without_a_passphrase() {
+        // Arrange
+        let mut store = Store::new_in_memory();
+        store
+            .add(
+                "a",
+                &Mnemonic::generate().unwrap(),
+                "pass",
+                Bip44Path::default(),
+            )
+            .unwrap();
+        store.add_multisig("team", 1, &["a"], true).unwrap();
+        let io = FakeIo::default();
+
+        // Act
+        run(
+            &DeleteArgs {
+                name: "team".to_string(),
+            },
+            &mut store,
+            &io,
+        )
+        .unwrap();
+
+        // Assert
+        assert!(store.get_by_name("team").is_err());
+        assert!(store.get_by_name("a").is_ok());
+        assert!(io.prompted.borrow().is_empty());
+        assert_eq!(io.printed.borrow()[0], "Deleted multisig \"team\"");
     }
 }
