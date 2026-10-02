@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
 
@@ -12,6 +12,9 @@ pub trait Io {
 
     /// Ask for a plain line of text echoed normally as it's typed.
     fn prompt_line(&self, prompt: &str) -> io::Result<String>;
+
+    /// Read everything piped on standard input.
+    fn read_stdin(&self) -> io::Result<String>;
 }
 
 /// Terminal input/output.
@@ -34,6 +37,12 @@ impl Io for TermIo {
         io::stdin().read_line(&mut line)?;
         Ok(line.trim().to_string())
     }
+
+    fn read_stdin(&self) -> io::Result<String> {
+        let mut data = String::new();
+        io::stdin().read_to_string(&mut data)?;
+        Ok(data)
+    }
 }
 
 #[cfg(test)]
@@ -48,6 +57,7 @@ pub mod testing {
         answers: RefCell<VecDeque<String>>,
         pub printed: RefCell<Vec<String>>,
         pub prompted: RefCell<Vec<String>>,
+        pub stdin: RefCell<String>,
     }
 
     impl FakeIo {
@@ -75,6 +85,10 @@ pub mod testing {
         fn prompt_line(&self, prompt: &str) -> io::Result<String> {
             self.prompted.borrow_mut().push(prompt.to_string());
             Ok(self.answers.borrow_mut().pop_front().unwrap_or_default())
+        }
+
+        fn read_stdin(&self) -> io::Result<String> {
+            Ok(self.stdin.borrow().clone())
         }
     }
 }

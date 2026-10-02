@@ -8,6 +8,7 @@ use crate::commands::add::AddArgs;
 use crate::commands::delete::DeleteArgs;
 use crate::commands::export::ExportArgs;
 use crate::commands::import::ImportArgs;
+use crate::commands::sign::SignArgs;
 
 /// A wallet for managing your Gno.land keys.
 #[derive(Debug, Parser)]
@@ -103,4 +104,7 @@ pub enum Command {
 
     /// Show the keys you have stored
     List,
+
+    /// Sign a transaction file with one of your keys, like `gnokey sign`
+    Sign(SignArgs),
 }

@@ -33,5 +33,6 @@ fn run(cli: Cli) -> Result<()> {
         Command::Export(args) => commands::export::run(&args, &store, &io),
         Command::Import(args) => commands::import::run(&args, &mut store, &io),
         Command::List => commands::list::run(&store, &io),
+        Command::Sign(args) => commands::sign::run(&args, &store, &io),
     }
 }

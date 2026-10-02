@@ -3,6 +3,7 @@ pub mod delete;
 pub mod export;
 pub mod import;
 pub mod list;
+pub mod sign;
 
 use anyhow::{Context, Result, bail};
 use zeroize::Zeroizing;
