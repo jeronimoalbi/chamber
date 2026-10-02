@@ -8,6 +8,7 @@ use crate::commands::add::AddArgs;
 use crate::commands::delete::DeleteArgs;
 use crate::commands::export::ExportArgs;
 use crate::commands::import::ImportArgs;
+use crate::commands::maketx::MakeTxArgs;
 use crate::commands::sign::SignArgs;
 
 /// A wallet for managing your Gno.land keys.
@@ -107,4 +108,8 @@ pub enum Command {
 
     /// Sign a transaction file with one of your keys, like `gnokey sign`
     Sign(SignArgs),
+
+    /// Compose an unsigned transaction file, like `gnokey maketx`
+    #[command(name = "maketx")]
+    MakeTx(MakeTxArgs),
 }
