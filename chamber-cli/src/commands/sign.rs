@@ -14,8 +14,7 @@ pub struct SignArgs {
     /// Name or address of the key to sign with
     pub key: String,
 
-    /// The Amino JSON transaction file to sign, e.g. one written by
-    /// `gnokey maketx`. It's updated in place with the signature
+    /// The Amino JSON transaction file to sign
     #[arg(long, value_name = "PATH")]
     pub tx_path: PathBuf,
 
@@ -38,7 +37,7 @@ pub struct SignArgs {
 
     /// Sign as a session account of the transaction's signer: the key is the
     /// session key, and --account-number/--account-sequence are the session
-    /// account's (`gnokey query auth/accounts/<master>/session/<session>`)
+    /// account's (query the chain at `auth/accounts/<master>/session/<session>`)
     #[arg(long)]
     pub session: bool,
 
@@ -60,6 +59,7 @@ pub fn run(args: &SignArgs, store: &Store, io: &impl Io) -> Result<()> {
     if raw.trim().is_empty() {
         bail!("transaction file {} is empty", args.tx_path.display());
     }
+
     let mut tx = Tx::from_amino_json(&raw)
         .with_context(|| format!("{} is not a valid transaction file", args.tx_path.display()))?;
 
@@ -80,7 +80,7 @@ pub fn run(args: &SignArgs, store: &Store, io: &impl Io) -> Result<()> {
     if !args.session && !signers.contains(&address) {
         // A member of a stored multisig key that is a signer may contribute
         // a signature document, but never a signature on the tx itself
-        let multisig = multisig_signer_for(store, &record, &signers)?;
+        let multisig = find_multisig_signer_for(store, &record, &signers)?;
         match (multisig, &args.output_document) {
             (Some(_), Some(_)) => {}
             (Some(multisig), None) => bail!(
@@ -130,7 +130,7 @@ pub fn run(args: &SignArgs, store: &Store, io: &impl Io) -> Result<()> {
         return Ok(());
     }
 
-    // Like gnokey, only save a transaction a node would accept
+    // Save a transaction a node would accept
     tx.validate_basic().with_context(|| {
         format!(
             "transaction is not valid after signing (it needs {} signatures, has {}; \
@@ -155,7 +155,7 @@ pub fn run(args: &SignArgs, store: &Store, io: &impl Io) -> Result<()> {
 
 /// The stored multisig key, if any, that signs this transaction and has
 /// `record` among its members (at any depth).
-fn multisig_signer_for(
+fn find_multisig_signer_for(
     store: &Store,
     record: &Record,
     signers: &[chamber::Address],
@@ -258,7 +258,7 @@ mod tests {
         let key = store.unlock("alice", "pass").unwrap();
         let sig = &signed.signatures[0];
         assert_eq!(sig.pub_key, key.pub_key());
-        let sign_bytes = unsigned.sign_doc(&opts()).sign_bytes().unwrap();
+        let sign_bytes = unsigned.build_sign_doc(&opts()).sign_bytes().unwrap();
         assert!(
             key.pub_key()
                 .verify(&sign_bytes, sig.signature.as_slice().try_into().unwrap())
@@ -285,7 +285,7 @@ mod tests {
             .as_slice()
             .try_into()
             .unwrap();
-        let doc = unsigned.sign_doc(&opts());
+        let doc = unsigned.build_sign_doc(&opts());
         assert!(
             key.pub_key()
                 .verify(&doc.sign_bytes_legacy().unwrap(), &signature)
@@ -326,7 +326,7 @@ mod tests {
             sequence: 2,
             ..Default::default()
         };
-        let sign_bytes = unsigned.sign_doc(&opts).sign_bytes().unwrap();
+        let sign_bytes = unsigned.build_sign_doc(&opts).sign_bytes().unwrap();
         assert!(
             bob.pub_key()
                 .verify(&sign_bytes, sig.signature.as_slice().try_into().unwrap())

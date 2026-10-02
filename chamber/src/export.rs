@@ -111,6 +111,7 @@ fn ensure_valid_export_format(format: &str) -> Result<()> {
             "unsupported export format {format:?} (expected {EXPORT_FORMAT:?})"
         )));
     }
+
     Ok(())
 }
 
@@ -134,6 +135,7 @@ pub fn encode_armor(bundle: &ExportBundle) -> Result<String> {
         out.push_str(std::str::from_utf8(line).unwrap());
         out.push('\n');
     }
+
     out.push_str(ARMOR_END);
     out.push('\n');
     Ok(out)

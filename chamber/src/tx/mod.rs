@@ -133,6 +133,7 @@ impl Tx {
                 }
             }
         }
+
         signers
     }
 
@@ -159,11 +160,12 @@ impl Tx {
         if self.signatures.len() != self.signers().len() {
             return Err(Error::Tx("wrong number of signers".into()));
         }
+
         Ok(())
     }
 
     /// The document one signer of this transaction signs.
-    pub fn sign_doc(&self, opts: &SignOpts) -> SignDoc {
+    pub fn build_sign_doc(&self, opts: &SignOpts) -> SignDoc {
         SignDoc {
             chain_id: opts.chain_id.clone(),
             account_number: opts.account_number,
@@ -175,8 +177,8 @@ impl Tx {
     }
 
     /// The bytes to sign for `opts`, in the rendering it selects.
-    fn payload(&self, opts: &SignOpts) -> Result<Vec<u8>> {
-        let doc = self.sign_doc(opts);
+    fn build_payload(&self, opts: &SignOpts) -> Result<Vec<u8>> {
+        let doc = self.build_sign_doc(opts);
         if opts.legacy {
             doc.sign_bytes_legacy()
         } else {
@@ -187,7 +189,7 @@ impl Tx {
     /// Sign as one of the signers and record the signature: an existing signature by the same key is replaced,
     /// otherwise the signature is appended. Sign in [`Tx::signers`] order.
     pub fn sign(&mut self, signer: &impl Signer, opts: &SignOpts) -> Result<Signature> {
-        let sign_bytes = self.payload(opts)?;
+        let sign_bytes = self.build_payload(opts)?;
         let signature = Signature::new(
             signer.pub_key(),
             signer.sign_arbitrary(&sign_bytes).to_vec(),
@@ -201,7 +203,7 @@ impl Tx {
     /// key's address as `session_addr` so the node looks the session up under
     /// the master it belongs to.
     pub fn sign_session(&mut self, signer: &impl Signer, opts: &SignOpts) -> Result<Signature> {
-        let sign_bytes = self.payload(opts)?;
+        let sign_bytes = self.build_payload(opts)?;
         let pub_key = signer.pub_key();
         let signature = Signature {
             pub_key: pub_key.into(),
@@ -322,6 +324,7 @@ impl AminoBinary for Tx {
         for msg in &self.msgs {
             w.any(1, msg.type_url(), msg);
         }
+
         w.message(2, false, &self.fee);
         w.repeated_message(3, &self.signatures);
         w.string(4, &self.memo);
@@ -462,7 +465,7 @@ mod tests {
         };
 
         // Act
-        let doc = tx.sign_doc(&opts);
+        let doc = tx.build_sign_doc(&opts);
 
         // Assert
         assert_eq!(
@@ -544,7 +547,7 @@ mod sign_tests {
     #[test]
     fn sign_bytes_are_sorted_canonical_json() {
         // Act
-        let bytes = tx().sign_doc(&opts(0)).sign_bytes().unwrap();
+        let bytes = tx().build_sign_doc(&opts(0)).sign_bytes().unwrap();
         let json = String::from_utf8(bytes).unwrap();
 
         // Assert
@@ -559,7 +562,7 @@ mod sign_tests {
         tx.fee = Fee::default();
 
         // Act
-        let json = String::from_utf8(tx.sign_doc(&opts(0)).sign_bytes().unwrap()).unwrap();
+        let json = String::from_utf8(tx.build_sign_doc(&opts(0)).sign_bytes().unwrap()).unwrap();
 
         // Assert
         assert!(json.contains(r#""fee":{"amount":[],"gas":"0"}"#));
@@ -568,13 +571,14 @@ mod sign_tests {
     #[test]
     fn legacy_sign_bytes_keep_the_tx_fee_shape() {
         // Act
-        let json = String::from_utf8(tx().sign_doc(&opts(0)).sign_bytes_legacy().unwrap()).unwrap();
+        let json =
+            String::from_utf8(tx().build_sign_doc(&opts(0)).sign_bytes_legacy().unwrap()).unwrap();
 
         // Assert
         assert!(json.contains(r#""fee":{"gas_fee":"1ugnot","gas_wanted":"1"}"#));
         assert_ne!(
-            tx().sign_doc(&opts(0)).sign_bytes().unwrap(),
-            tx().sign_doc(&opts(0)).sign_bytes_legacy().unwrap()
+            tx().build_sign_doc(&opts(0)).sign_bytes().unwrap(),
+            tx().build_sign_doc(&opts(0)).sign_bytes_legacy().unwrap()
         );
     }
 
@@ -620,7 +624,7 @@ mod sign_tests {
         // Assert
         assert_eq!(tx.signatures, vec![sig.clone()]);
         assert_eq!(sig.pub_key, key.pub_key());
-        let sign_bytes = tx.sign_doc(&opts(0)).sign_bytes().unwrap();
+        let sign_bytes = tx.build_sign_doc(&opts(0)).sign_bytes().unwrap();
         assert!(
             key.pub_key()
                 .verify(&sign_bytes, sig.signature.as_slice().try_into().unwrap())
@@ -642,7 +646,7 @@ mod sign_tests {
 
         // Assert
         let signature: [u8; 64] = sig.signature.as_slice().try_into().unwrap();
-        let doc = tx.sign_doc(&legacy);
+        let doc = tx.build_sign_doc(&legacy);
         assert!(
             key.pub_key()
                 .verify(&doc.sign_bytes_legacy().unwrap(), &signature)
@@ -665,7 +669,7 @@ mod sign_tests {
 
         // Assert
         let signature: [u8; 64] = sig.signature.as_slice().try_into().unwrap();
-        let doc = tx.sign_doc(&legacy);
+        let doc = tx.build_sign_doc(&legacy);
         assert!(
             session_key
                 .pub_key()

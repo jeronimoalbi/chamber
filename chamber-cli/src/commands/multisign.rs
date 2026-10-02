@@ -184,7 +184,7 @@ mod tests {
             sequence: 1,
             ..Default::default()
         };
-        let sign_bytes = unsigned.sign_doc(&opts).sign_bytes().unwrap();
+        let sign_bytes = unsigned.build_sign_doc(&opts).sign_bytes().unwrap();
         let a = store.unlock("a", "pass").unwrap();
         let doc_a = docs.iter().find(|d| d.pub_key == a.pub_key()).unwrap();
         assert!(

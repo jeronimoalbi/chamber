@@ -84,20 +84,20 @@ pub fn run(args: &MakeTxArgs, store: &Store, io: &impl Io) -> Result<()> {
 
 /// The address a message names as its signer: the master account when
 /// `--master` is given (a session key will sign), else the key itself.
-pub(crate) fn caller_address(store: &Store, common: &CommonArgs) -> Result<Address> {
+pub(crate) fn resolve_caller_address(store: &Store, common: &CommonArgs) -> Result<Address> {
     match &common.master {
         Some(master) => match master.parse::<Address>() {
             Ok(address) => Ok(address),
-            Err(_) => signer_address(store, master).map_err(|_| {
+            Err(_) => resolve_signer_address(store, master).map_err(|_| {
                 anyhow::anyhow!("no key named or with address \"{master}\" for --master")
             }),
         },
-        None => signer_address(store, &common.key),
+        None => resolve_signer_address(store, &common.key),
     }
 }
 
 /// The address of the stored key `name_or_address` refers to.
-pub(crate) fn signer_address(store: &Store, name_or_address: &str) -> Result<Address> {
+pub(crate) fn resolve_signer_address(store: &Store, name_or_address: &str) -> Result<Address> {
     let record = store
         .get_by_name(name_or_address)
         .or_else(|_| store.get_by_address(name_or_address))
@@ -113,6 +113,7 @@ pub(crate) fn emit(common: &CommonArgs, msg: Msg, io: &impl Io) -> Result<()> {
     if common.gas_wanted <= 0 {
         bail!("--gas-wanted must be positive");
     }
+
     let gas_fee = Coin::parse(&common.gas_fee).context("invalid --gas-fee")?;
     let tx = Tx::new(
         vec![msg],
@@ -131,6 +132,7 @@ pub(crate) fn emit(common: &CommonArgs, msg: Msg, io: &impl Io) -> Result<()> {
         }
         None => io.print_line(&json),
     }
+
     Ok(())
 }
 
@@ -254,27 +256,36 @@ mod tests {
 
         // Assert
         assert_eq!(
-            caller_address(&store, &common("bob")).unwrap().to_bech32(),
+            resolve_caller_address(&store, &common("bob"))
+                .unwrap()
+                .to_bech32(),
             bob.address
         );
-        assert_eq!(caller_address(&store, &by_name).unwrap(), alice);
-        assert_eq!(caller_address(&store, &by_address).unwrap(), alice);
+        assert_eq!(resolve_caller_address(&store, &by_name).unwrap(), alice);
+        assert_eq!(resolve_caller_address(&store, &by_address).unwrap(), alice);
         assert_eq!(
-            caller_address(&store, &unknown).unwrap_err().to_string(),
+            resolve_caller_address(&store, &unknown)
+                .unwrap_err()
+                .to_string(),
             "no key named or with address \"nobody\" for --master"
         );
     }
 
     #[test]
-    fn signer_address_accepts_name_or_address_and_rejects_unknown() {
+    fn resolve_signer_address_accepts_name_or_address_and_rejects_unknown() {
         // Arrange
         let (store, alice) = store_with_alice();
 
         // Assert
-        assert_eq!(signer_address(&store, "alice").unwrap(), alice);
-        assert_eq!(signer_address(&store, &alice.to_bech32()).unwrap(), alice);
+        assert_eq!(resolve_signer_address(&store, "alice").unwrap(), alice);
         assert_eq!(
-            signer_address(&store, "nobody").unwrap_err().to_string(),
+            resolve_signer_address(&store, &alice.to_bech32()).unwrap(),
+            alice
+        );
+        assert_eq!(
+            resolve_signer_address(&store, "nobody")
+                .unwrap_err()
+                .to_string(),
             "no key named or with address \"nobody\""
         );
     }

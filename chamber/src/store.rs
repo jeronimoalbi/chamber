@@ -78,11 +78,11 @@ impl Store {
         Ok(record)
     }
 
-    /// Add a k-of-n multisig key over keys already in the store, like
-    /// `gnokey add --multisig`. With `sort`, members are ordered by address
-    /// (gnokey's default); every party must build the key the same way to
-    /// get the same address. Only public keys are stored, so the result
-    /// can't sign by itself: members sign and `Tx::multisign` combines.
+    /// Add a k-of-n multisig key over keys already in the store.
+    /// With `sort`, members are ordered by address; every party must build
+    /// the key the same way to get the same address. Only public keys are
+    /// stored, so the result can't sign by itself: members sign and
+    /// `Tx::multisign` combines.
     pub fn add_multisig(
         &mut self,
         name: &str,
@@ -208,6 +208,7 @@ fn ensure_valid_key_name(name: &str) -> Result<()> {
             "name {name:?} may only contain ASCII letters, digits, '_' and '-'"
         )));
     }
+
     Ok(())
 }
 

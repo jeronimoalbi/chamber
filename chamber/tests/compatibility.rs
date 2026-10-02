@@ -84,6 +84,7 @@ fn address_bech32_round_trips() {
         let a = chamber::Address::from_bech32(&d.address).unwrap();
         assert_eq!(a.to_bech32(), d.address);
     }
+
     assert!(chamber::Address::from_bech32("gpub1abc").is_err());
     assert!(chamber::Address::from_bech32("cosmos1xyz").is_err());
 }
@@ -348,7 +349,7 @@ fn check_tx_signing(vec: &tx_vectors::TxVectors, legacy: bool) {
                 legacy,
             };
 
-            let sign_bytes = payload(&tx.sign_doc(&opts), legacy);
+            let sign_bytes = payload(&tx.build_sign_doc(&opts), legacy);
             assert_eq!(
                 hex::encode(&sign_bytes),
                 s.sign_bytes_hex,
@@ -476,7 +477,7 @@ fn check_multisig(vec: &tx_vectors::TxVectors, legacy: bool) {
         legacy,
     };
     assert_eq!(
-        hex::encode(payload(&tx.sign_doc(&opts), legacy)),
+        hex::encode(payload(&tx.build_sign_doc(&opts), legacy)),
         ms.sign_bytes_hex,
         "legacy: {legacy}"
     );

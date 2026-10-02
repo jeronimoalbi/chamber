@@ -112,7 +112,7 @@ impl MultisigPubKey {
     pub fn combine(&self, member_signatures: &[Signature]) -> Result<Signature> {
         let mut multisig = Multisignature::new(self.pubkeys.len());
         for sig in member_signatures {
-            let index = self.member_index(&sig.pub_key).ok_or_else(|| {
+            let index = self.find_member_index(&sig.pub_key).ok_or_else(|| {
                 Error::Tx(format!(
                     "signature by {} is not from a member of this multisig",
                     sig.pub_key.address()

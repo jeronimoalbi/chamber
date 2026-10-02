@@ -5,7 +5,7 @@ use chamber::tx::{MemPackage, MsgAddPackage};
 use chamber::{Coins, Msg, Store};
 use clap::Args;
 
-use super::{CommonArgs, caller_address, emit};
+use super::{CommonArgs, emit, resolve_caller_address};
 use crate::io::Io;
 
 /// Options for `chamber maketx addpkg`.
@@ -35,7 +35,7 @@ pub fn run(args: &AddPkgArgs, store: &Store, io: &impl Io) -> Result<()> {
     let package = MemPackage::read_dir(&args.pkgdir, &args.pkgpath)
         .with_context(|| format!("failed to read package at {}", args.pkgdir.display()))?;
     let msg = Msg::AddPackage(MsgAddPackage {
-        creator: caller_address(store, &args.common)?,
+        creator: resolve_caller_address(store, &args.common)?,
         package,
         send: Coins::parse(&args.send).context("invalid --send amount")?,
         max_deposit: Coins::parse(&args.max_deposit).context("invalid --max-deposit amount")?,

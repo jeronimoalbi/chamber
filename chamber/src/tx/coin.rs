@@ -91,6 +91,7 @@ impl<'de> Deserialize<'de> for Coin {
         if s.is_empty() {
             return Ok(Self::default());
         }
+
         Self::parse(&s).map_err(serde::de::Error::custom)
     }
 }
@@ -120,6 +121,7 @@ impl Coins {
         if s.is_empty() {
             return Ok(Self::empty());
         }
+
         let coins = s.split(',').map(Coin::parse).collect::<Result<Vec<_>>>()?;
         Self::new(coins)
     }
@@ -148,8 +150,10 @@ impl fmt::Display for Coins {
             if i > 0 {
                 f.write_str(",")?;
             }
+
             write!(f, "{coin}")?;
         }
+
         Ok(())
     }
 }
@@ -217,6 +221,7 @@ fn validate_coins(coins: &[Coin]) -> Result<()> {
             return Err(Error::Coin(format!("duplicate denom: {}", coin.denom)));
         }
     }
+
     Ok(())
 }
 
@@ -299,6 +304,7 @@ mod tests {
         for ok in ["ugnot", "/ok", "a1_", "gno.land/r/x:y"] {
             assert!(Coin::new(ok, 1).is_ok(), "{ok:?} should be valid");
         }
+
         for bad in ["", "ab", "Ugnot", "1abc", "ug not", "ugnöt", "_abc"] {
             let err = Coin::new(bad, 1).unwrap_err();
             assert_eq!(

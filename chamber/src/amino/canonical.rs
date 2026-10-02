@@ -36,8 +36,10 @@ fn write_value(out: &mut String, value: &Value) {
                 if i > 0 {
                     out.push(',');
                 }
+
                 write_value(out, item);
             }
+
             out.push(']');
         }
         Value::Object(map) => {
@@ -51,10 +53,12 @@ fn write_value(out: &mut String, value: &Value) {
                 if i > 0 {
                     out.push(',');
                 }
+
                 write_string(out, key);
                 out.push(':');
                 write_value(out, item);
             }
+
             out.push('}');
         }
     }

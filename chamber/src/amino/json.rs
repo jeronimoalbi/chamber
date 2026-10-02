@@ -215,6 +215,7 @@ pub(crate) fn deserialize_any_string<'de, D: Deserializer<'de>>(
             any.type_url
         )));
     }
+
     Ok(any.value)
 }
 

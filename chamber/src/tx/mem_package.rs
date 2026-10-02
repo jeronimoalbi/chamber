@@ -79,7 +79,7 @@ impl MemPackage {
                 continue;
             }
 
-            let name = package_name_from_body(&file.body)
+            let name = extract_package_name_from_body(&file.body)
                 .map_err(|e| Error::Package(format!("{}: {e}", file.name)))?;
 
             if file.name.ends_with("_filetest.gno") {
@@ -177,7 +177,7 @@ fn is_good_file(name: &str) -> bool {
 }
 
 /// Extract the package name declared by a Gno source file's `package` clause.
-pub fn package_name_from_body(body: &str) -> Result<String> {
+pub fn extract_package_name_from_body(body: &str) -> Result<String> {
     let mut rest = body;
     if let Some(stripped) = char::from_u32(0xFEFF).and_then(|bom| rest.strip_prefix(bom)) {
         rest = stripped;
@@ -253,6 +253,7 @@ fn validate_user_pkg_path(path: &str) -> Result<()> {
             "expected user package path but got {path:?}"
         )));
     }
+
     Ok(())
 }
 
@@ -270,23 +271,26 @@ mod tests {
     #[test]
     fn package_name_skips_comments_and_bom() {
         // Assert
-        assert_eq!(package_name_from_body("package hello\n").unwrap(), "hello");
         assert_eq!(
-            package_name_from_body("\n// doc\n// more\npackage x_y1 // trailing").unwrap(),
+            extract_package_name_from_body("package hello\n").unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            extract_package_name_from_body("\n// doc\n// more\npackage x_y1 // trailing").unwrap(),
             "x_y1"
         );
         assert_eq!(
-            package_name_from_body("/* block\n comment */ package hello_test\n").unwrap(),
+            extract_package_name_from_body("/* block\n comment */ package hello_test\n").unwrap(),
             "hello_test"
         );
 
         let bom = char::from_u32(0xFEFF).unwrap();
         assert_eq!(
-            package_name_from_body(&format!("{bom}package bom")).unwrap(),
+            extract_package_name_from_body(&format!("{bom}package bom")).unwrap(),
             "bom"
         );
         assert_eq!(
-            package_name_from_body("package ünïcode").unwrap(),
+            extract_package_name_from_body("package ünïcode").unwrap(),
             "ünïcode"
         );
     }
@@ -302,7 +306,7 @@ mod tests {
             ("package _", "invalid package name _"),
             ("/* never closed\npackage x", "comment not terminated"),
         ] {
-            let err = package_name_from_body(body).unwrap_err();
+            let err = extract_package_name_from_body(body).unwrap_err();
             assert_eq!(
                 err.to_string(),
                 format!("invalid package: {msg}"),

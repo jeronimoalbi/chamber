@@ -69,9 +69,11 @@ fn validate_allow_path(entry: &str) -> std::result::Result<(), String> {
                 "only vm/exec accepts a path suffix; {route_type:?} does not"
             ));
         }
+
         if path.is_empty() {
             return Err("vm/exec entry requires a non-empty path after ':'".into());
         }
+
         if path.ends_with('/') {
             return Err(format!("path {path:?} has a trailing slash"));
         }

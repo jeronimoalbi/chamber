@@ -57,7 +57,7 @@ fn split_hmac_sha512(key: &[u8], data: &[u8]) -> ([u8; 32], [u8; 32]) {
 }
 
 /// Return the master private key and chain code for a BIP39 seed.
-pub fn master_from_seed(seed: &[u8]) -> ([u8; 32], [u8; 32]) {
+pub fn derive_master_from_seed(seed: &[u8]) -> ([u8; 32], [u8; 32]) {
     split_hmac_sha512(b"Bitcoin seed", seed)
 }
 
@@ -137,7 +137,7 @@ pub fn derive_private_key_for_path(
 
 /// Derive the leaf private key for a path directly from a BIP39 seed.
 pub fn derive_bip44(seed: &[u8], path: Bip44Path) -> Result<[u8; 32]> {
-    let (mut master, mut chain_code) = master_from_seed(seed);
+    let (mut master, mut chain_code) = derive_master_from_seed(seed);
     let result = derive_private_key_for_path(&master, &chain_code, &path.to_string());
     master.zeroize();
     chain_code.zeroize();
@@ -218,8 +218,8 @@ mod tests {
         let seed = hex::decode(SEED_HEX).unwrap();
 
         // Act
-        let first = master_from_seed(&seed);
-        let second = master_from_seed(&seed);
+        let first = derive_master_from_seed(&seed);
+        let second = derive_master_from_seed(&seed);
 
         // Assert
         assert_eq!(first, second);
@@ -232,8 +232,8 @@ mod tests {
         let seed_b = [0u8; 64];
 
         // Act
-        let (priv_a, chain_a) = master_from_seed(&seed_a);
-        let (priv_b, chain_b) = master_from_seed(&seed_b);
+        let (priv_a, chain_a) = derive_master_from_seed(&seed_a);
+        let (priv_b, chain_b) = derive_master_from_seed(&seed_b);
 
         // Assert
         assert_ne!(priv_a, priv_b);
@@ -262,7 +262,7 @@ mod tests {
 
         // Arrange
         let seed = hex::decode(SEED_HEX).unwrap();
-        let (master, chain_code) = master_from_seed(&seed);
+        let (master, chain_code) = derive_master_from_seed(&seed);
 
         // Act
         let first = derive_private_key_for_path(&master, &chain_code, "44'/118'/0'/0/0").unwrap();
@@ -281,7 +281,7 @@ mod tests {
 
         // Arrange
         let seed = hex::decode(SEED_HEX).unwrap();
-        let (master, chain_code) = master_from_seed(&seed);
+        let (master, chain_code) = derive_master_from_seed(&seed);
 
         // Act
         let hardened = derive_private_key_for_path(&master, &chain_code, "0'").unwrap();
@@ -296,7 +296,7 @@ mod tests {
     fn derive_private_key_for_path_rejects_empty_element() {
         // Arrange
         let seed = hex::decode(SEED_HEX).unwrap();
-        let (master, chain_code) = master_from_seed(&seed);
+        let (master, chain_code) = derive_master_from_seed(&seed);
 
         // Act
         derive_private_key_for_path(&master, &chain_code, "44'//0").unwrap();
@@ -307,7 +307,7 @@ mod tests {
     fn derive_private_key_for_path_rejects_non_numeric_element() {
         // Arrange
         let seed = hex::decode(SEED_HEX).unwrap();
-        let (master, chain_code) = master_from_seed(&seed);
+        let (master, chain_code) = derive_master_from_seed(&seed);
 
         // Act
         derive_private_key_for_path(&master, &chain_code, "abc'").unwrap();

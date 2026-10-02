@@ -253,6 +253,7 @@ impl<'a> Reader<'a> {
                 return Ok(value);
             }
         }
+
         Err(Error::Amino("varint too long".into()))
     }
 

@@ -32,12 +32,12 @@ pub struct Cli {
 impl Cli {
     /// Where the keystore lives.
     pub fn home(&self) -> Result<PathBuf> {
-        resolve_home(self.home.clone(), project_data_dir())
+        resolve_home(self.home.clone(), find_project_data_dir())
     }
 }
 
 /// This OS's conventional data directory for chamber, when there is one.
-fn project_data_dir() -> Option<PathBuf> {
+fn find_project_data_dir() -> Option<PathBuf> {
     ProjectDirs::from("", "", "chamber").map(|dirs| dirs.data_dir().to_path_buf())
 }
 

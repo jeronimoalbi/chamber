@@ -261,17 +261,21 @@ impl MsgCreateSession {
         if self.creator.is_zero() {
             return Err(Error::Tx("missing creator address".into()));
         }
+
         if self.expires_at < 0 {
             return Err(Error::Tx(
                 "expires_at must be non-negative (0 means no expiry)".into(),
             ));
         }
+
         if self.spend_period < 0 {
             return Err(Error::Tx("spend_period must be non-negative".into()));
         }
+
         if self.allow_paths.len() > crate::tx::session::MAX_ALLOW_PATHS {
             return Err(Error::Tx("too many allow_paths".into()));
         }
+
         Ok(())
     }
 }
@@ -289,6 +293,7 @@ impl MsgRevokeSession {
         if self.creator.is_zero() {
             return Err(Error::Tx("missing creator address".into()));
         }
+
         Ok(())
     }
 }
@@ -305,6 +310,7 @@ impl MsgRevokeAllSessions {
         if self.creator.is_zero() {
             return Err(Error::Tx("missing creator address".into()));
         }
+
         Ok(())
     }
 }
@@ -748,6 +754,7 @@ mod session_msg_tests {
             assert_eq!(msg.signers(), vec![Address::from_bech32(ALICE).unwrap()]);
             assert!(msg.validate_basic().is_ok());
         }
+
         assert_eq!(
             json::to_string(&Msg::RevokeAllSessions(MsgRevokeAllSessions {
                 creator: Address::from_bech32(ALICE).unwrap()

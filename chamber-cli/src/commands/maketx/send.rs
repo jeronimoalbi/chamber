@@ -3,7 +3,7 @@ use chamber::tx::MsgSend;
 use chamber::{Coins, Msg, Store};
 use clap::Args;
 
-use super::{CommonArgs, caller_address, emit};
+use super::{CommonArgs, emit, resolve_caller_address};
 use crate::io::Io;
 
 /// Options for `chamber maketx send`.
@@ -23,7 +23,7 @@ pub struct SendArgs {
 
 pub fn run(args: &SendArgs, store: &Store, io: &impl Io) -> Result<()> {
     let msg = Msg::Send(MsgSend {
-        from_address: caller_address(store, &args.common)?,
+        from_address: resolve_caller_address(store, &args.common)?,
         to_address: args.to.parse().context("invalid --to address")?,
         amount: Coins::parse(&args.send).context("invalid --send amount")?,
     });

@@ -70,6 +70,7 @@ impl AnyPubKey {
                 if reader.key()? != (1, 2) {
                     return Err(Error::Amino("malformed secp256k1 key".into()));
                 }
+
                 let raw: [u8; 33] = reader
                     .bytes()?
                     .try_into()
@@ -91,6 +92,7 @@ impl AnyPubKey {
                         }
                     }
                 }
+
                 Ok(AnyPubKey::Multisig(MultisigPubKey::new(
                     threshold, pubkeys, false,
                 )?))
@@ -118,6 +120,7 @@ impl AnyPubKey {
                 hrp.as_str()
             )));
         }
+
         let data: Vec<u8> = checked.byte_iter().collect();
         Self::from_amino_any(&data)
     }
@@ -173,7 +176,7 @@ impl MultisigPubKey {
     }
 
     /// The position of `key` among the members, if it is one.
-    pub fn member_index(&self, key: &AnyPubKey) -> Option<usize> {
+    pub fn find_member_index(&self, key: &AnyPubKey) -> Option<usize> {
         self.pubkeys.iter().position(|k| k == key)
     }
 }
@@ -422,9 +425,9 @@ mod tests {
         assert_ne!(AnyPubKey::Secp256k1(key(1)), key(2));
         assert_ne!(AnyPubKey::Multisig(multisig()), key(1));
         assert_eq!(
-            multisig().member_index(&key(2).into()),
+            multisig().find_member_index(&key(2).into()),
             multisig().pubkeys.iter().position(|k| *k == key(2))
         );
-        assert_eq!(multisig().member_index(&key(7).into()), None);
+        assert_eq!(multisig().find_member_index(&key(7).into()), None);
     }
 }

@@ -3,7 +3,7 @@ use chamber::tx::MsgCall;
 use chamber::{Coins, Msg, Store};
 use clap::{ArgAction, Args};
 
-use super::{CommonArgs, caller_address, emit};
+use super::{CommonArgs, emit, resolve_caller_address};
 use crate::io::Io;
 
 /// Options for `chamber maketx call`.
@@ -35,7 +35,7 @@ pub struct CallArgs {
 
 pub fn run(args: &CallArgs, store: &Store, io: &impl Io) -> Result<()> {
     let msg = Msg::Call(MsgCall {
-        caller: caller_address(store, &args.common)?,
+        caller: resolve_caller_address(store, &args.common)?,
         send: Coins::parse(&args.send).context("invalid --send amount")?,
         max_deposit: Coins::parse(&args.max_deposit).context("invalid --max-deposit amount")?,
         pkg_path: args.pkgpath.clone(),

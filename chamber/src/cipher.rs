@@ -52,8 +52,8 @@ pub(crate) fn encrypt(plaintext: &[u8], passphrase: &str) -> Result<EncryptedBlo
         t_cost: ARGON2_T_COST,
         p_cost: ARGON2_P_COST,
     };
-    let salt = random_bytes::<16>()?;
-    let nonce = random_bytes::<24>()?;
+    let salt = generate_random_bytes::<16>()?;
+    let nonce = generate_random_bytes::<24>()?;
     let key = derive_key(passphrase, &salt, kdf)?;
     let ciphertext = XChaCha20Poly1305::new(Key::from_slice(key.as_ref()))
         .encrypt(XNonce::from_slice(&nonce), plaintext)
@@ -97,7 +97,7 @@ fn derive_key(passphrase: &str, salt: &[u8; 16], kdf: KdfParams) -> Result<Zeroi
     Ok(key)
 }
 
-fn random_bytes<const N: usize>() -> Result<[u8; N]> {
+fn generate_random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut b = [0u8; N];
     getrandom::getrandom(&mut b).map_err(|e| Error::Key(format!("csprng unavailable: {e}")))?;
     Ok(b)

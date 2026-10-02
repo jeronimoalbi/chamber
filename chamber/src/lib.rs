@@ -1,5 +1,5 @@
 //! A Rust wallet library for gno.land: keys, addresses, an encrypted keystore,
-//! and transaction building, signing and multisig compatible with `gnokey`.
+//! and transaction building, signing and multisig that Gno.land nodes accept.
 //!
 //! #### Example
 //!
@@ -19,7 +19,7 @@
 //! let mut store = Store::new_in_memory();
 //! store.add("alice", &mnemonic, "passphrase", Bip44Path::default()).unwrap();
 //!
-//! // Sign a transaction, exactly like `gnokey sign` would
+//! // Sign a transaction
 //! use chamber::tx::MsgSend;
 //! use chamber::{Coin, Coins, Fee, Msg, SignOpts, Tx};
 //!
@@ -33,7 +33,7 @@
 //! let opts = SignOpts { chain_id: "dev".into(), ..Default::default() };
 //! tx.sign(&key, &opts).unwrap();
 //!
-//! let tx_file = tx.to_amino_json().unwrap(); // for `gnokey broadcast <file>`
+//! let tx_file = tx.to_amino_json().unwrap(); // a JSON transaction file, ready to broadcast
 //! let blob = tx.to_amino_binary();           // for a node's `broadcast_tx_commit`
 //! ```
 

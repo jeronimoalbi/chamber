@@ -3,7 +3,7 @@ use chamber::tx::{MemPackage, MsgRun};
 use chamber::{Coins, Msg, Store};
 use clap::Args;
 
-use super::{CommonArgs, caller_address, emit};
+use super::{CommonArgs, emit, resolve_caller_address};
 use crate::io::Io;
 
 /// Options for `chamber maketx run`.
@@ -35,7 +35,7 @@ pub fn run(args: &RunArgs, store: &Store, io: &impl Io) -> Result<()> {
     };
 
     let msg = Msg::Run(MsgRun {
-        caller: caller_address(store, &args.common)?,
+        caller: resolve_caller_address(store, &args.common)?,
         send: Coins::parse(&args.send).context("invalid --send amount")?,
         max_deposit: Coins::parse(&args.max_deposit).context("invalid --max-deposit amount")?,
         package,

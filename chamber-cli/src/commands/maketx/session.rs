@@ -6,7 +6,7 @@ use chamber::tx::{MsgCreateSession, MsgRevokeAllSessions, MsgRevokeSession};
 use chamber::{AnyPubKey, Coins, Msg, Store};
 use clap::{ArgAction, Args, Subcommand};
 
-use super::{CommonArgs, emit, signer_address};
+use super::{CommonArgs, emit, resolve_signer_address};
 use crate::io::Io;
 
 /// Options for `chamber maketx session`.
@@ -86,14 +86,14 @@ pub fn run(args: &SessionArgs, store: &Store, io: &impl Io) -> Result<()> {
 
 /// The master account: session messages are always signed by the master
 /// key directly, never through another session.
-fn master_address(store: &Store, common: &CommonArgs) -> Result<chamber::Address> {
+fn resolve_master_address(store: &Store, common: &CommonArgs) -> Result<chamber::Address> {
     if common.master.is_some() {
         bail!(
             "--master cannot be used with session commands: they must be signed by the master key itself"
         );
     }
 
-    signer_address(store, &common.key)
+    resolve_signer_address(store, &common.key)
 }
 
 /// A session public key given as a stored key's name or a bech32 string.
@@ -109,7 +109,7 @@ fn resolve_pub_key(store: &Store, key: &str) -> Result<AnyPubKey> {
 }
 
 fn create(args: &CreateArgs, store: &Store, io: &impl Io) -> Result<()> {
-    let creator = master_address(store, &args.common)?;
+    let creator = resolve_master_address(store, &args.common)?;
     let session_key = resolve_pub_key(store, &args.pubkey)?;
     if args.spend_period < 0 {
         bail!("--spend-period must be non-negative");
@@ -134,7 +134,7 @@ fn create(args: &CreateArgs, store: &Store, io: &impl Io) -> Result<()> {
 
 fn revoke(args: &RevokeArgs, store: &Store, io: &impl Io) -> Result<()> {
     let msg = Msg::RevokeSession(MsgRevokeSession {
-        creator: master_address(store, &args.common)?,
+        creator: resolve_master_address(store, &args.common)?,
         session_key: resolve_pub_key(store, &args.pubkey)?,
     });
     emit(&args.common, msg, io)
@@ -142,7 +142,7 @@ fn revoke(args: &RevokeArgs, store: &Store, io: &impl Io) -> Result<()> {
 
 fn revoke_all(args: &RevokeAllArgs, store: &Store, io: &impl Io) -> Result<()> {
     let msg = Msg::RevokeAllSessions(MsgRevokeAllSessions {
-        creator: master_address(store, &args.common)?,
+        creator: resolve_master_address(store, &args.common)?,
     });
     emit(&args.common, msg, io)
 }
@@ -166,12 +166,14 @@ fn parse_expires_at(s: &str, now: i64) -> Result<i64> {
         if secs <= 0 {
             bail!("{s:?} must be a positive duration");
         }
+
         if secs > MAX_SESSION_DURATION {
             bail!(
                 "{s:?} exceeds the chain maximum of {} days",
                 MAX_SESSION_DURATION / 86400
             );
         }
+
         return Ok(now + secs);
     }
 
@@ -188,6 +190,7 @@ fn parse_expires_at(s: &str, now: i64) -> Result<i64> {
             MAX_SESSION_DURATION / 86400
         );
     }
+
     Ok(ts)
 }
 
