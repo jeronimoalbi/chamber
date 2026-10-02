@@ -8,7 +8,8 @@ use crate::error::{Error, Result};
 pub const HRP: &str = "g";
 
 /// A 20-byte Gno.land account address.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+/// The default is the zero address, which Gno.land treats as "unset" (see [`Address::is_zero`]).
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Address([u8; 20]);
 
 impl Address {
@@ -51,13 +52,6 @@ impl Address {
             .try_into()
             .map_err(|_| Error::Bech32(format!("expected 20-byte payload, got {}", data.len())))?;
         Ok(Self(bytes))
-    }
-}
-
-/// The zero address, which Gno.land treats as "unset" (see [`Address::is_zero`]).
-impl Default for Address {
-    fn default() -> Self {
-        Self([0u8; 20])
     }
 }
 
